@@ -1,0 +1,231 @@
+{
+  "family_name": "Sharma Family Office",
+  "members": [
+    {
+      "member_id": "father",
+      "name": "Rajesh Sharma",
+      "entity_type": "INDIVIDUAL",
+      "tax_slab_rate": "0.30",
+      "relation": "Father",
+      "metadata": {}
+    },
+    {
+      "member_id": "mother",
+      "name": "Sunita Sharma",
+      "entity_type": "INDIVIDUAL",
+      "tax_slab_rate": "0.20",
+      "relation": "Mother",
+      "metadata": {}
+    },
+    {
+      "member_id": "child",
+      "name": "Aarav Sharma",
+      "entity_type": "INDIVIDUAL",
+      "tax_slab_rate": "0.30",
+      "relation": "Adult Child",
+      "metadata": {}
+    },
+    {
+      "member_id": "sharma_huf",
+      "name": "Sharma HUF",
+      "entity_type": "HUF",
+      "tax_slab_rate": "0.30",
+      "relation": "HUF",
+      "metadata": {}
+    }
+  ],
+  "assets": [
+    {
+      "asset_id": "REL-20230315-001",
+      "symbol": "RELIANCE.NS",
+      "asset_class": "EQUITY",
+      "platform": "zerodha",
+      "member_id": "father",
+      "quantity": "30",
+      "acquisition_date": "2023-03-15",
+      "cost_basis_per_unit": "2340.00",
+      "current_price": "2847.50",
+      "metadata": {
+        "exchange": "NSE",
+        "isin": "INE002A01018"
+      }
+    },
+    {
+      "asset_id": "REL-20240901-002",
+      "symbol": "RELIANCE.NS",
+      "asset_class": "EQUITY",
+      "platform": "zerodha",
+      "member_id": "father",
+      "quantity": "20",
+      "acquisition_date": "2024-09-01",
+      "cost_basis_per_unit": "2680.00",
+      "current_price": "2847.50",
+      "metadata": {
+        "exchange": "NSE"
+      }
+    },
+    {
+      "asset_id": "BTC-20240214-001",
+      "symbol": "BTC",
+      "asset_class": "CRYPTO",
+      "platform": "binance",
+      "member_id": "father",
+      "quantity": "0.18",
+      "acquisition_date": "2024-02-14",
+      "cost_basis_per_unit": "18000000.00",
+      "current_price": "21611111.11",
+      "metadata": {
+        "quote_currency": "INR"
+      }
+    },
+    {
+      "asset_id": "FD-HDFC-20240401",
+      "symbol": "HDFC FD",
+      "asset_class": "FD",
+      "platform": "manual",
+      "member_id": "father",
+      "quantity": "1",
+      "acquisition_date": "2024-04-01",
+      "cost_basis_per_unit": "300000.00",
+      "current_price": "300000.00",
+      "metadata": {
+        "bank": "HDFC Bank",
+        "interest_accrued_inr": "32000.00",
+        "tds_deducted_inr": "0.00",
+        "maturity_date": "2025-07-15",
+        "slab_rate": "0.30"
+      }
+    },
+    {
+      "asset_id": "HDFCMF-20230110",
+      "symbol": "HDFCMF001",
+      "asset_class": "MF",
+      "platform": "groww",
+      "member_id": "mother",
+      "quantity": "1200",
+      "acquisition_date": "2023-01-10",
+      "cost_basis_per_unit": "42.50",
+      "current_price": "58.20",
+      "metadata": {
+        "fund_type": "equity",
+        "amc": "HDFC"
+      }
+    },
+    {
+      "asset_id": "DEBTMF-20250101",
+      "symbol": "ICICIDEBT01",
+      "asset_class": "MF",
+      "platform": "kuvera",
+      "member_id": "mother",
+      "quantity": "800",
+      "acquisition_date": "2025-01-01",
+      "cost_basis_per_unit": "31.00",
+      "current_price": "32.90",
+      "metadata": {
+        "fund_type": "debt",
+        "slab_rate": "0.20"
+      }
+    },
+    {
+      "asset_id": "ETH-20241120-001",
+      "symbol": "ETH",
+      "asset_class": "CRYPTO",
+      "platform": "coindcx",
+      "member_id": "child",
+      "quantity": "2.5",
+      "acquisition_date": "2024-11-20",
+      "cost_basis_per_unit": "240000.00",
+      "current_price": "205000.00",
+      "metadata": {
+        "quote_currency": "INR"
+      }
+    },
+    {
+      "asset_id": "PAYTM-20240921-001",
+      "symbol": "PAYTM.NS",
+      "asset_class": "EQUITY",
+      "platform": "zerodha",
+      "member_id": "child",
+      "quantity": "150",
+      "acquisition_date": "2024-09-21",
+      "cost_basis_per_unit": "845.00",
+      "current_price": "665.00",
+      "metadata": {
+        "exchange": "NSE"
+      }
+    },
+    {
+      "asset_id": "GOLD-20210412-001",
+      "symbol": "PHYSICAL_GOLD",
+      "asset_class": "GOLD",
+      "platform": "manual",
+      "member_id": "mother",
+      "quantity": "150",
+      "acquisition_date": "2021-04-12",
+      "cost_basis_per_unit": "4800.00",
+      "current_price": "6900.00",
+      "metadata": {
+        "unit": "gram"
+      }
+    },
+    {
+      "asset_id": "AAPL-20231201-001",
+      "symbol": "AAPL",
+      "asset_class": "US_EQUITY",
+      "platform": "manual",
+      "member_id": "sharma_huf",
+      "quantity": "40",
+      "acquisition_date": "2023-12-01",
+      "cost_basis_per_unit": "14250.00",
+      "current_price": "18100.00",
+      "metadata": {
+        "broker": "INDmoney",
+        "country": "US"
+      }
+    },
+    {
+      "asset_id": "TCS-20220215-001",
+      "symbol": "TCS.NS",
+      "asset_class": "EQUITY",
+      "platform": "zerodha",
+      "member_id": "sharma_huf",
+      "quantity": "60",
+      "acquisition_date": "2022-02-15",
+      "cost_basis_per_unit": "3180.00",
+      "current_price": "4025.00",
+      "metadata": {
+        "exchange": "NSE"
+      }
+    }
+  ],
+  "realized_state": {
+    "father": {
+      "ltcg_realized_inr": 87000.0,
+      "stcg_realized_inr": 42000.0,
+      "crypto_realized_inr": 120000.0,
+      "tax_paid_inr": 65000.0,
+      "crypto_tds_inr": 18000.0
+    },
+    "mother": {
+      "ltcg_realized_inr": 35000.0,
+      "stcg_realized_inr": 12000.0,
+      "crypto_realized_inr": 0.0,
+      "tax_paid_inr": 21000.0,
+      "crypto_tds_inr": 0.0
+    },
+    "child": {
+      "ltcg_realized_inr": 0.0,
+      "stcg_realized_inr": 18000.0,
+      "crypto_realized_inr": 40000.0,
+      "tax_paid_inr": 9000.0,
+      "crypto_tds_inr": 4500.0
+    },
+    "sharma_huf": {
+      "ltcg_realized_inr": 22000.0,
+      "stcg_realized_inr": 0.0,
+      "crypto_realized_inr": 0.0,
+      "tax_paid_inr": 12000.0,
+      "crypto_tds_inr": 0.0
+    }
+  }
+}

@@ -1,0 +1,171 @@
+{
+  "family_name": "Demo Family",
+  "members": [
+    {
+      "member_id": "father",
+      "name": "Rajesh Sharma",
+      "relationship": "SELF",
+      "pan": "ABCDE1234F",
+      "tax_slab_rate": 0.30,
+      "ytd_realized_ltcg": 87000,
+      "ytd_realized_stcg": 23000,
+      "ytd_realized_crypto": 120000,
+      "ytd_tax_paid": 52000,
+      "assets": [
+        {
+          "type": "EQUITY",
+          "lot_id": "ZRD-RELIANCE-001",
+          "symbol": "RELIANCE.NS",
+          "name": "Reliance Industries",
+          "platform": "zerodha",
+          "quantity": 100,
+          "acquisition_date": "2023-09-15",
+          "cost_basis_per_unit": 2340.00,
+          "current_price": 2847.50
+        },
+        {
+          "type": "EQUITY",
+          "lot_id": "ZRD-RELIANCE-002",
+          "symbol": "RELIANCE.NS",
+          "name": "Reliance Industries",
+          "platform": "zerodha",
+          "quantity": 50,
+          "acquisition_date": "2024-06-01",
+          "cost_basis_per_unit": 2680.00,
+          "current_price": 2847.50
+        },
+        {
+          "type": "EQUITY",
+          "lot_id": "ZRD-INFY-001",
+          "symbol": "INFY.NS",
+          "name": "Infosys",
+          "platform": "zerodha",
+          "quantity": 200,
+          "acquisition_date": "2023-03-20",
+          "cost_basis_per_unit": 1420.00,
+          "current_price": 1680.00
+        },
+        {
+          "type": "EQUITY",
+          "lot_id": "ZRD-ZOMATO-001",
+          "symbol": "ZOMATO.NS",
+          "name": "Zomato",
+          "platform": "zerodha",
+          "quantity": 500,
+          "acquisition_date": "2024-07-15",
+          "cost_basis_per_unit": 175.00,
+          "current_price": 145.00
+        },
+        {
+          "type": "EQUITY",
+          "lot_id": "ZRD-PAYTM-001",
+          "symbol": "PAYTM.NS",
+          "name": "One97 Communications",
+          "platform": "zerodha",
+          "quantity": 300,
+          "acquisition_date": "2024-03-10",
+          "cost_basis_per_unit": 620.00,
+          "current_price": 525.00
+        },
+        {
+          "type": "CRYPTO",
+          "lot_id": "BNB-BTC-001",
+          "symbol": "BTC",
+          "name": "Bitcoin",
+          "platform": "binance",
+          "quantity": 0.18,
+          "acquisition_date": "2023-07-20",
+          "cost_basis_per_unit": 1800000,
+          "current_price": 2161111
+        },
+        {
+          "type": "CRYPTO",
+          "lot_id": "BNB-ETH-001",
+          "symbol": "ETH",
+          "name": "Ethereum",
+          "platform": "binance",
+          "quantity": 2.5,
+          "acquisition_date": "2024-02-15",
+          "cost_basis_per_unit": 220000,
+          "current_price": 248000
+        },
+        {
+          "type": "FD",
+          "lot_id": "FD-HDFC-001",
+          "bank": "HDFC Bank",
+          "principal_inr": 3000000,
+          "maturity_value_inr": 3210000,
+          "start_date": "2024-07-15",
+          "maturity_date": "2025-07-15",
+          "interest_rate_pct": 7.1
+        },
+        {
+          "type": "GOLD",
+          "lot_id": "GOLD-001",
+          "quantity_grams": 100,
+          "cost_per_gram_inr": 4800,
+          "purchase_date": "2022-01-10",
+          "current_price_per_gram_inr": 6200
+        }
+      ]
+    },
+    {
+      "member_id": "mother",
+      "name": "Priya Sharma",
+      "relationship": "SPOUSE",
+      "pan": "FGHIJ5678K",
+      "tax_slab_rate": 0.30,
+      "ytd_realized_ltcg": 15000,
+      "ytd_realized_stcg": 5000,
+      "ytd_realized_crypto": 0,
+      "ytd_tax_paid": 6000,
+      "assets": [
+        {
+          "type": "EQUITY",
+          "lot_id": "ZRD-HDFCBANK-001",
+          "symbol": "HDFCBANK.NS",
+          "name": "HDFC Bank",
+          "platform": "zerodha",
+          "quantity": 150,
+          "acquisition_date": "2022-04-15",
+          "cost_basis_per_unit": 1340.00,
+          "current_price": 1720.00
+        },
+        {
+          "type": "FD",
+          "lot_id": "FD-SBI-001",
+          "bank": "SBI",
+          "principal_inr": 2000000,
+          "maturity_value_inr": 2140000,
+          "start_date": "2024-10-01",
+          "maturity_date": "2025-10-01",
+          "interest_rate_pct": 7.0
+        }
+      ]
+    },
+    {
+      "member_id": "son",
+      "name": "Arjun Sharma",
+      "relationship": "CHILD",
+      "pan": "KLMNO9012L",
+      "tax_slab_rate": 0.20,
+      "ytd_realized_ltcg": 8000,
+      "ytd_realized_stcg": 2000,
+      "ytd_realized_crypto": 0,
+      "ytd_tax_paid": 2000,
+      "assets": [
+        {
+          "type": "CRYPTO",
+          "lot_id": "CDX-SOL-001",
+          "symbol": "SOL",
+          "name": "Solana",
+          "platform": "coindcx",
+          "quantity": 15,
+          "acquisition_date": "2024-09-01",
+          "cost_basis_per_unit": 8350,
+          "current_price": 14200
+        }
+      ]
+    }
+  ]
+}

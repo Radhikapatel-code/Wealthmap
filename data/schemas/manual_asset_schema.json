@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Manual Asset Schema",
+  "type": "object",
+  "required": [
+    "asset_id",
+    "symbol",
+    "asset_class",
+    "platform",
+    "member_id",
+    "quantity",
+    "acquisition_date",
+    "cost_basis_per_unit",
+    "current_price"
+  ],
+  "properties": {
+    "asset_id": {
+      "type": "string"
+    },
+    "symbol": {
+      "type": "string"
+    },
+    "asset_class": {
+      "type": "string",
+      "enum": ["EQUITY", "CRYPTO", "MF", "FD", "GOLD", "US_EQUITY", "REAL_ESTATE", "CASH"]
+    },
+    "platform": {
+      "type": "string"
+    },
+    "member_id": {
+      "type": "string"
+    },
+    "quantity": {
+      "type": "number"
+    },
+    "acquisition_date": {
+      "type": "string",
+      "format": "date"
+    },
+    "cost_basis_per_unit": {
+      "type": "number"
+    },
+    "current_price": {
+      "type": "number"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}
