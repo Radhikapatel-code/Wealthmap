@@ -8,8 +8,8 @@ WealthMap is a cross-asset portfolio intelligence engine built specifically for 
 ## 🚀 Quick Start (Demo Mode — No API Keys Needed)
 
 ```bash
-git clone https://github.com/yourusername/wealthmap.git
-cd wealthmap
+git clone https://github.com/Radhikapatel-code/Wealthmap.git
+cd Wealthmap
 python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 
@@ -86,6 +86,19 @@ Without exchange API keys, WealthMap runs with realistic mock/demo data.
 │                          └──────────────────┘               │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## ⚡ High-Performance Columnar Engine (`wealthmap-engine`)
+
+WealthMap includes a native Rust engine [`wealthmap-engine`](./wealthmap-engine/) powering stateful FIFO tax-lot matching, portfolio aggregation, and SQL queries over Arrow memory batches.
+
+- **Columnar Pipeline Execution**: Built using `arrow-rs` vector operators (`Scan -> Filter -> Sort -> FIFOMatch -> GroupAggregate`).
+- **Parallel Multi-Portfolio Execution**: Work-stealing Rayon thread pool for multi-portfolio scalability (**22.95 ms** across portfolios).
+- **Python / PyO3 Interop**: Zero-overhead in-process C-extension bindings (`RustEngineBridge`).
+- **SQL Parser**: Standard SQL query parsing (`sqlparser-rs`) for dynamic analytical queries over tax lot streams.
+
+For benchmark charts, architecture diagrams, and design rationales, see [`wealthmap-engine/README.md`](./wealthmap-engine/README.md).
 
 ---
 
