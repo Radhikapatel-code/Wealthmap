@@ -113,6 +113,36 @@ class WealthService:
             "projected_tax_if_all_sold_today_inr": float(money(projected_fy_tax)),
         }
 
+    def simulate_sale_rust(self, member_id: str, symbol: str, quantity: str | float | int, sale_price: str | float | int) -> dict:
+        from datetime import date
+        from core.tax.rust_engine_bridge import RustEngineBridge
+        lots = self.repository.get_assets_by_symbol(member_id, symbol)
+        raw_txs = []
+        for lot in lots:
+            raw_txs.append({
+                "transaction_id": f"TX-BUY-{lot.asset_id}",
+                "member_id": member_id,
+                "symbol": symbol,
+                "side": "BUY",
+                "date": lot.acquisition_date.isoformat(),
+                "quantity": str(lot.quantity),
+                "price": str(lot.cost_basis_per_unit),
+                "asset_class": lot.asset_class.value if hasattr(lot.asset_class, "value") else str(lot.asset_class),
+                "lot_id": lot.asset_id,
+            })
+        raw_txs.append({
+            "transaction_id": "TX-SELL-SIM",
+            "member_id": member_id,
+            "symbol": symbol,
+            "side": "SELL",
+            "date": date.today().isoformat(),
+            "quantity": str(quantity),
+            "price": str(sale_price),
+            "asset_class": lots[0].asset_class.value if lots and hasattr(lots[0].asset_class, "value") else "EQUITY",
+            "lot_id": None,
+        })
+        return RustEngineBridge.compute_tax_lots(raw_txs)
+
     def simulate_sale(self, member_id: str, symbol: str, quantity: str | float | int, method: str = "FIFO") -> dict:
         if method.upper() != "FIFO":
             raise ValueError("Only FIFO sale simulation is implemented in this MVP.")

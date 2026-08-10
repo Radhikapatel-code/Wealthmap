@@ -1,0 +1,47 @@
+[
+  {
+    "member_id": "father",
+    "symbol": "RELIANCE.NS",
+    "classification": "LTCG",
+    "total_quantity": 120.0,
+    "total_gross_gain_inr": 71000.0,
+    "total_taxable_gain_inr": 71000.0,
+    "total_tax_inr": 9230.0
+  },
+  {
+    "member_id": "father",
+    "symbol": "INFY.NS",
+    "classification": "LTCG",
+    "total_quantity": 200.0,
+    "total_gross_gain_inr": 70000.0,
+    "total_taxable_gain_inr": 70000.0,
+    "total_tax_inr": 9100.0
+  },
+  {
+    "member_id": "father",
+    "symbol": "INFY.NS",
+    "classification": "STCG",
+    "total_quantity": 50.0,
+    "total_gross_gain_inr": 12500.0,
+    "total_taxable_gain_inr": 12500.0,
+    "total_tax_inr": 2600.0
+  },
+  {
+    "member_id": "mother",
+    "symbol": "HDFCBANK.NS",
+    "classification": "LTCG",
+    "total_quantity": 100.0,
+    "total_gross_gain_inr": 10000.0,
+    "total_taxable_gain_inr": 10000.0,
+    "total_tax_inr": 1300.0
+  },
+  {
+    "member_id": "son",
+    "symbol": "BTC",
+    "classification": "CRYPTO",
+    "total_quantity": 0.8,
+    "total_gross_gain_inr": 2000000.0,
+    "total_taxable_gain_inr": 2000000.0,
+    "total_tax_inr": 624000.0
+  }
+]

@@ -1,0 +1,123 @@
+[
+  {
+    "transaction_id": "TX-001",
+    "member_id": "father",
+    "symbol": "RELIANCE.NS",
+    "side": "BUY",
+    "date": "2023-01-15",
+    "quantity": "100",
+    "price": "2000.00",
+    "asset_class": "EQUITY",
+    "lot_id": "LOT-REL-1"
+  },
+  {
+    "transaction_id": "TX-002",
+    "member_id": "father",
+    "symbol": "RELIANCE.NS",
+    "side": "BUY",
+    "date": "2023-06-20",
+    "quantity": "50",
+    "price": "2200.00",
+    "asset_class": "EQUITY",
+    "lot_id": "LOT-REL-2"
+  },
+  {
+    "transaction_id": "TX-003",
+    "member_id": "father",
+    "symbol": "RELIANCE.NS",
+    "side": "SELL",
+    "date": "2024-03-10",
+    "quantity": "70",
+    "price": "2500.00",
+    "asset_class": "EQUITY",
+    "lot_id": null
+  },
+  {
+    "transaction_id": "TX-004",
+    "member_id": "father",
+    "symbol": "RELIANCE.NS",
+    "side": "SELL",
+    "date": "2024-08-01",
+    "quantity": "50",
+    "price": "2800.00",
+    "asset_class": "EQUITY",
+    "lot_id": null
+  },
+  {
+    "transaction_id": "TX-005",
+    "member_id": "father",
+    "symbol": "INFY.NS",
+    "side": "BUY",
+    "date": "2022-05-10",
+    "quantity": "200",
+    "price": "1400.00",
+    "asset_class": "EQUITY",
+    "lot_id": "LOT-INFY-1"
+  },
+  {
+    "transaction_id": "TX-006",
+    "member_id": "father",
+    "symbol": "INFY.NS",
+    "side": "BUY",
+    "date": "2024-01-15",
+    "quantity": "100",
+    "price": "1500.00",
+    "asset_class": "EQUITY",
+    "lot_id": "LOT-INFY-2"
+  },
+  {
+    "transaction_id": "TX-007",
+    "member_id": "father",
+    "symbol": "INFY.NS",
+    "side": "SELL",
+    "date": "2024-09-20",
+    "quantity": "250",
+    "price": "1750.00",
+    "asset_class": "EQUITY",
+    "lot_id": null
+  },
+  {
+    "transaction_id": "TX-008",
+    "member_id": "mother",
+    "symbol": "HDFCBANK.NS",
+    "side": "BUY",
+    "date": "2023-02-01",
+    "quantity": "150",
+    "price": "1600.00",
+    "asset_class": "EQUITY",
+    "lot_id": "LOT-HDFC-1"
+  },
+  {
+    "transaction_id": "TX-009",
+    "member_id": "mother",
+    "symbol": "HDFCBANK.NS",
+    "side": "SELL",
+    "date": "2024-05-15",
+    "quantity": "100",
+    "price": "1700.00",
+    "asset_class": "EQUITY",
+    "lot_id": null
+  },
+  {
+    "transaction_id": "TX-010",
+    "member_id": "son",
+    "symbol": "BTC",
+    "side": "BUY",
+    "date": "2023-10-01",
+    "quantity": "1.5",
+    "price": "2500000.00",
+    "asset_class": "CRYPTO",
+    "lot_id": "LOT-BTC-1"
+  },
+  {
+    "transaction_id": "TX-011",
+    "member_id": "son",
+    "symbol": "BTC",
+    "side": "SELL",
+    "date": "2024-04-10",
+    "quantity": "0.8",
+    "price": "5000000.00",
+    "asset_class": "CRYPTO",
+    "lot_id": null
+  }
+]
