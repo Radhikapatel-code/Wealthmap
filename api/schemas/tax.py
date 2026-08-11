@@ -7,4 +7,5 @@ class SaleSimulationRequest(BaseModel):
     member_id: str
     symbol: str
     quantity: float = Field(gt=0)
+    sale_price: float = Field(default=1000.0, gt=0)
     method: str = "FIFO"

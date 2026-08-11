@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "wealthmap_engine"
+version = "0.1.0"
+description = "High-performance columnar query engine for FIFO tax lot matching and portfolio analytics"
+requires-python = ">=3.10"
+
+[tool.maturin]
+features = ["python"]
+module-name = "wealthmap_engine"

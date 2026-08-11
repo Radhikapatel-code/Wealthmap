@@ -14,17 +14,26 @@ logger = logging.getLogger(__name__)
 
 _RUST_ENGINE_AVAILABLE = False
 try:
+    import os
+    import sys
+    if sys.platform == "win32":
+        mingw_bin = r"C:\Users\Dell\AppData\Local\Microsoft\WinGet\Packages\MartinStorsjo.LLVM-MinGW.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\llvm-mingw-20260616-ucrt-x86_64\bin"
+        if os.path.exists(mingw_bin):
+            try:
+                os.add_dll_directory(mingw_bin)
+            except AttributeError:
+                os.environ["PATH"] = mingw_bin + os.pathsep + os.environ.get("PATH", "")
     import wealthmap_engine
     _RUST_ENGINE_AVAILABLE = True
-except ImportError:
-    logger.warning("Native PyO3 'wealthmap_engine' module not loaded. Falling back to pure Python execution.")
+except Exception as exc:
+    logger.warning("Native PyO3 'wealthmap_engine' module not loaded (%s). Falling back to pure Python execution.", exc)
 
 
 class RustEngineBridge:
     """Interface to wealthmap-engine Rust core."""
 
     @staticmethod
-    fn_is_available() -> bool:
+    def is_available() -> bool:
         return _RUST_ENGINE_AVAILABLE
 
     @classmethod

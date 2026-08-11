@@ -6,7 +6,7 @@ description = "High-performance columnar query engine for FIFO tax lot matching 
 
 [lib]
 name = "wealthmap_engine"
-crate-type = ["rlib"]
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 arrow = "53.4.0"

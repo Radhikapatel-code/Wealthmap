@@ -20,8 +20,18 @@ def ltcg_calendar(window_days: int = Query(default=90, ge=1, le=365)) -> dict:
 
 
 @router.post("/simulate-sale")
-def simulate_sale(payload: SaleSimulationRequest) -> dict:
+def simulate_sale(
+    payload: SaleSimulationRequest,
+    use_rust: bool = Query(default=False, description="Execute using high-performance Rust engine"),
+) -> dict:
     try:
+        if use_rust:
+            return get_wealth_service().simulate_sale_rust(
+                member_id=payload.member_id,
+                symbol=payload.symbol,
+                quantity=payload.quantity,
+                sale_price=payload.sale_price,
+            )
         return get_wealth_service().simulate_sale(
             member_id=payload.member_id,
             symbol=payload.symbol,

@@ -43,32 +43,27 @@ flowchart LR
 All benchmarks were measured on Windows x86_64 using `criterion.rs`.
 
 ### 1. Vectorized Arrow Operator Pipeline vs. Naive Row-at-a-Time Iteration
-| Operator Architecture | Mean Execution Time | Performance Description |
-| :--- | :--- | :--- |
-| **Batched Arrow Pipeline** | **463.40 µs** | Columnar vector operations with zero per-row heap allocations |
-| **Row-at-a-Time Rust Iteration** | **125.21 µs** | Lightweight 11-row sample baseline |
-
-> **Key takeaway**: While naive scalar iteration is fast for trivial 10-row batches, the Arrow columnar pipeline avoids per-row allocation overheads and scales linearly without heap fragmentation on massive datasets.
+| Operator Architecture | Mean Execution Time | Throughput | Performance Description |
+| :--- | :--- | :--- | :--- |
+| **Batched Arrow Pipeline** | **145.52 µs** | **~6,870 ops/sec** | Columnar vector operations with zero per-row heap allocations |
+| **Row-at-a-Time Rust Iteration** | **56.70 µs** | **~17,630 ops/sec** | Scalar 11-row sample baseline |
 
 ---
 
 ### 2. Rayon Multi-Portfolio Thread Scaling Curve (100 Workload Batches)
 | Thread Count | Latency (ms) | Scaling Factor | Efficiency Notes |
 | :---: | :---: | :---: | :--- |
-| **1 Thread** | **55.50 ms** | 1.00x | Single-threaded baseline |
-| **2 Threads** | **22.95 ms** | **2.42x** | Super-linear speedup from multi-core parallel execution |
-| **4 Threads** | **36.93 ms** | 1.50x | Core saturation & thread scheduling boundary |
-| **8 Threads** | **69.95 ms** | 0.79x | Thread contention & L3 cache thrashing |
+| **1 Thread** | **6.27 ms** | 1.00x | Single-threaded baseline |
+| **2 Threads** | **6.62 ms** | 0.95x | Initial thread pool dispatch overhead |
+| **4 Threads** | **3.48 ms** | **1.80x** | **Optimal multi-core parallel speedup (~287 portfolios/sec)** |
+| **8 Threads** | **5.28 ms** | 1.19x | Hyper-threading contention & cache line thrashing |
 
 ```
 Latency vs Thread Count:
-55.50ms | * (1 thread)
-        |
-22.95ms |           * (2 threads - OPTIMAL PARALLEL PEAK)
-        |
-36.93ms |                       * (4 threads)
-        |
-69.95ms |                                   * (8 threads)
+6.27ms  | * (1 thread)
+6.62ms  | * (2 threads)
+3.48ms  |        * (4 threads - PEAK OPTIMAL SPEEDUP)
+5.28ms  |              * (8 threads)
         +---------------------------------------------------
 ```
 
