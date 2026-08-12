@@ -6,7 +6,7 @@ from decimal import Decimal
 from hypothesis import given, strategies as st
 
 from core.models import AssetClass, AssetLot
-from core.tax.lot_tracker import FIFOLotTracker
+from core.tax.lot_tracker import LotTracker
 
 
 def make_lot(asset_id: str, quantity: str, acquired: str) -> AssetLot:
@@ -24,7 +24,7 @@ def make_lot(asset_id: str, quantity: str, acquired: str) -> AssetLot:
 
 
 def test_fifo_consumes_oldest_lots_first():
-    tracker = FIFOLotTracker()
+    tracker = LotTracker()
     lots = [
         make_lot("lot-2", "5", "2024-02-01"),
         make_lot("lot-1", "10", "2024-01-01"),
@@ -38,7 +38,7 @@ def test_fifo_consumes_oldest_lots_first():
 
 @given(quantity=st.integers(min_value=1, max_value=20))
 def test_fifo_slice_quantities_sum_to_requested_amount(quantity: int):
-    tracker = FIFOLotTracker()
+    tracker = LotTracker()
     lots = [
         make_lot("lot-1", "10", "2024-01-01"),
         make_lot("lot-2", "10", "2024-02-01"),

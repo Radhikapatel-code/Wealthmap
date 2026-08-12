@@ -36,6 +36,7 @@ def simulate_sale(
             member_id=payload.member_id,
             symbol=payload.symbol,
             quantity=payload.quantity,
+            sale_price=payload.sale_price,
             method=payload.method,
         )
     except ValueError as exc:

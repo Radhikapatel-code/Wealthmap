@@ -9,7 +9,29 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 import uuid
 
+from dataclasses import dataclass
+
 from core.models import AssetLot, AssetClass, Platform, RealizedTransaction, TaxBreakdown, TaxClassification, TaxConstants
+
+
+@dataclass
+class SaleSlice:
+    lot: AssetLot
+    quantity: Decimal
+    sale_price: Decimal = Decimal("0")
+
+    @property
+    def cost_basis_inr(self) -> Decimal:
+        return (self.quantity * self.lot.effective_cost_basis).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    @property
+    def proceeds_inr(self) -> Decimal:
+        price = self.sale_price if self.sale_price > Decimal("0") else self.lot.current_price
+        return (self.quantity * price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    @property
+    def gain_inr(self) -> Decimal:
+        return (self.proceeds_inr - self.cost_basis_inr).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
 class LotTracker:
@@ -59,6 +81,48 @@ class LotTracker:
         return [r for r in self._realized if r.member_id == member_id]
 
     # ── Sale Simulation ──────────────────────────────────────────────────────
+
+    def build_sale_slices(
+        self,
+        lots: list[AssetLot] | None = None,
+        quantity: Decimal | float | int = Decimal("0"),
+        sale_price: Decimal | float | int | None = None,
+        member_id: str | None = None,
+        symbol: str | None = None,
+    ) -> list[SaleSlice]:
+        """
+        Construct FIFO sale slices for a given quantity across lots.
+        If `lots` is not passed directly, retrieves lots for `member_id` and `symbol`.
+        Does not mutate state.
+        """
+        qty = Decimal(str(quantity))
+        if lots is None:
+            if member_id is None or symbol is None:
+                raise ValueError("Either `lots` or (`member_id` and `symbol`) must be provided.")
+            available = self.get_lots(member_id, symbol)
+        else:
+            available = list(lots)
+
+        if not available:
+            raise ValueError("No lots available for sale slice computation.")
+
+        available.sort(key=lambda x: x.acquisition_date)
+        total_available = sum(l.quantity for l in available)
+        if qty > total_available:
+            raise ValueError(f"Cannot sell {qty} units — only {total_available} available")
+
+        price = Decimal(str(sale_price)) if sale_price is not None else Decimal("0")
+        remaining_qty = qty
+        slices = []
+
+        for lot in available:
+            if remaining_qty <= 0:
+                break
+            sell_qty = min(remaining_qty, lot.quantity)
+            slices.append(SaleSlice(lot=lot, quantity=sell_qty, sale_price=price))
+            remaining_qty -= sell_qty
+
+        return slices
 
     def simulate_sale(
         self,
@@ -351,3 +415,7 @@ class LotTracker:
             "reason": "Tax saving from waiting is minimal (<₹1,000). Proceed if needed.",
             "potential_saving_inr": float(saving),
         }
+
+
+# Backwards compatibility alias
+FIFOLotTracker = LotTracker

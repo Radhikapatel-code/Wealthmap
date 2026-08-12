@@ -24,6 +24,7 @@ class TLHScanner:
         lots: list[AssetLot],
         ytd_realized_ltcg: Decimal = Decimal("0"),
         ytd_realized_stcg: Decimal = Decimal("0"),
+        min_saving: Decimal = Decimal("0"),
     ) -> list[TLHOpportunity]:
         """
         Full portfolio scan for tax-loss harvesting opportunities.
@@ -67,7 +68,7 @@ class TLHScanner:
             )
 
             # Only surface meaningful opportunities
-            if net_saving >= Decimal("500"):
+            if net_saving >= min_saving:
                 opportunities.append(TLHOpportunity(
                     loss_lot=loss_lot,
                     offsettable_gain_lots=offsettable_gains,
@@ -166,3 +167,7 @@ class TLHScanner:
                 "Consult a CA before executing any TLH strategy.",
             ],
         }
+
+
+# Alias for backward compatibility
+TaxLossHarvestScanner = TLHScanner

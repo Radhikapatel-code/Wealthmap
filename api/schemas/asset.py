@@ -81,6 +81,7 @@ class SimulateSaleRequest(BaseModel):
     member_id: str
     symbol: str
     quantity: float = Field(..., gt=0)
+    sale_price: Optional[float] = Field(default=None, description="Optional sale price per unit in INR")
     method: str = Field(default="FIFO", description="FIFO (only supported method)")
 
 

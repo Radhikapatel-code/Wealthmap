@@ -71,14 +71,37 @@ class ManualAssetImporter:
     def import_from_json(self, assets: list[dict], member_id: str) -> list[AssetLot]:
         lots = []
         for asset in assets:
-            asset_type = asset.get("type", "").upper()
+            asset_type = (asset.get("type") or asset.get("asset_class") or "").upper()
             try:
-                if asset_type == "FD":
+                if asset_type == "FD" and "principal_inr" in asset:
                     lots.append(self.import_fd(asset, member_id))
-                elif asset_type == "GOLD":
+                elif asset_type == "GOLD" and "quantity_grams" in asset:
                     lots.append(self.import_gold(asset, member_id))
-                elif asset_type == "US_EQUITY":
+                elif asset_type == "US_EQUITY" and "cost_basis_usd" in asset:
                     lots.append(self.import_us_equity(asset, member_id))
+                else:
+                    ac_val = asset.get("asset_class", "EQUITY").upper()
+                    try:
+                        ac = AssetClass(ac_val)
+                    except ValueError:
+                        ac = AssetClass.EQUITY
+                    try:
+                        pl = Platform(asset.get("platform", "manual").lower())
+                    except ValueError:
+                        pl = Platform.MANUAL
+
+                    lots.append(AssetLot(
+                        lot_id=asset.get("asset_id") or asset.get("lot_id") or f"MANUAL-{str(uuid.uuid4())[:8]}",
+                        symbol=asset.get("symbol", "ASSET"),
+                        asset_class=ac,
+                        platform=pl,
+                        member_id=asset.get("member_id", member_id),
+                        quantity=Decimal(str(asset["quantity"])),
+                        acquisition_date=date.fromisoformat(asset["acquisition_date"]),
+                        cost_basis_per_unit=Decimal(str(asset["cost_basis_per_unit"])),
+                        current_price=Decimal(str(asset["current_price"])),
+                        metadata=asset.get("metadata", {}),
+                    ))
             except Exception as e:
                 logger.error(f"Failed to import asset {asset}: {e}")
         return lots
@@ -164,3 +187,13 @@ class YahooFinanceFeed:
                 )
             updated.append(lot)
         return updated
+
+
+def load_manual_assets_from_payload(payload: dict, member_id: str = "father") -> list[AssetLot]:
+    """Helper function to load manual assets from JSON payload."""
+    importer = ManualAssetImporter()
+    raw_assets = payload.get("assets", [])
+    if raw_assets:
+        m_id = raw_assets[0].get("member_id", member_id)
+        return importer.import_from_json(raw_assets, m_id)
+    return []

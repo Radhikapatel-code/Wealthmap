@@ -229,7 +229,10 @@ def get_ltcg_calendar(days: int = Query(default=90, ge=7, le=365)):
 
 
 @app.post("/tax/simulate-sale", tags=["Tax"])
-def simulate_sale(request: SimulateSaleRequest):
+def simulate_sale(
+    request: SimulateSaleRequest,
+    use_rust: bool = Query(default=False, description="Execute simulation using high-performance Rust engine"),
+):
     """Simulate selling shares — detailed lot-by-lot tax breakdown."""
     family = _get_family()
     member = family.get_member(request.member_id)
@@ -244,13 +247,50 @@ def simulate_sale(request: SimulateSaleRequest):
     if not all_lots:
         raise HTTPException(status_code=404, detail=f"No lots found for {request.symbol} ({request.member_id})")
 
-    current_price = all_lots[0].current_price
+    sale_price = Decimal(str(request.sale_price)) if getattr(request, "sale_price", None) is not None else all_lots[0].current_price
+
+    if use_rust:
+        from datetime import date
+        from core.tax.rust_engine_bridge import RustEngineBridge
+
+        if not RustEngineBridge.is_available():
+            raise HTTPException(status_code=503, detail="Rust engine binding 'wealthmap_engine' is not available in this environment.")
+
+        raw_txs = []
+        for lot in all_lots:
+            raw_txs.append({
+                "transaction_id": f"TX-BUY-{lot.lot_id}",
+                "member_id": request.member_id,
+                "symbol": lot.symbol,
+                "side": "BUY",
+                "date": lot.acquisition_date.isoformat(),
+                "quantity": str(lot.quantity),
+                "price": str(lot.cost_basis_per_unit),
+                "asset_class": lot.asset_class.value if hasattr(lot.asset_class, "value") else str(lot.asset_class),
+                "lot_id": lot.lot_id,
+            })
+        raw_txs.append({
+            "transaction_id": "TX-SELL-SIM",
+            "member_id": request.member_id,
+            "symbol": all_lots[0].symbol,
+            "side": "SELL",
+            "date": date.today().isoformat(),
+            "quantity": str(request.quantity),
+            "price": str(sale_price),
+            "asset_class": all_lots[0].asset_class.value if hasattr(all_lots[0].asset_class, "value") else "EQUITY",
+            "lot_id": None,
+        })
+        try:
+            return RustEngineBridge.compute_tax_lots(raw_txs)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Rust engine execution failed: {e}") from e
+
     try:
         result = _lot_tracker.simulate_sale(
             member_id=request.member_id,
             symbol=all_lots[0].symbol,
             quantity=Decimal(str(request.quantity)),
-            sale_price=current_price,
+            sale_price=sale_price,
             ytd_realized_ltcg=member.ytd_realized_ltcg,
         )
         return result

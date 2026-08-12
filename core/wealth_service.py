@@ -12,7 +12,7 @@ from core.repository import PortfolioRepository
 from core.tax.crypto_tax import CryptoTaxEngine
 from core.tax.equity_tax import EquityTaxEngine
 from core.tax.fd_tax import FixedDepositTaxEngine
-from core.tax.lot_tracker import FIFOLotTracker
+from core.tax.lot_tracker import LotTracker
 from core.tax.mf_tax import MutualFundTaxEngine
 from core.tax.tax_calendar import TaxCalendar
 from core.tax.tlh_scanner import TaxLossHarvestScanner
@@ -26,7 +26,7 @@ class WealthService:
         self.crypto_tax = CryptoTaxEngine()
         self.mf_tax = MutualFundTaxEngine()
         self.fd_tax = FixedDepositTaxEngine()
-        self.lot_tracker = FIFOLotTracker()
+        self.lot_tracker = LotTracker()
         self.tax_calendar = TaxCalendar()
         self.tlh_scanner = TaxLossHarvestScanner()
 
@@ -143,102 +143,36 @@ class WealthService:
         })
         return RustEngineBridge.compute_tax_lots(raw_txs)
 
-    def simulate_sale(self, member_id: str, symbol: str, quantity: str | float | int, method: str = "FIFO") -> dict:
+    def simulate_sale(
+        self,
+        member_id: str,
+        symbol: str,
+        quantity: str | float | int,
+        sale_price: str | float | int | None = None,
+        method: str = "FIFO",
+    ) -> dict:
         if method.upper() != "FIFO":
             raise ValueError("Only FIFO sale simulation is implemented in this MVP.")
+
         lots = self.repository.get_assets_by_symbol(member_id, symbol)
-        sale_slices = self.lot_tracker.build_sale_slices(lots, quantity)
+        if not lots:
+            raise ValueError(f"No lots found for {member_id}/{symbol}")
+
+        qty_decimal = decimalize(quantity)
+        price_decimal = decimalize(sale_price) if sale_price is not None else lots[0].current_price
+
         state = self.repository.get_realized_state(member_id)
-        remaining_exemption = max(
-            self.equity_tax.LTCG_EXEMPTION_INR - state.ltcg_realized_inr,
-            0,
-        )
-        lot_breakdown = []
-        ltcg_gain = 0
-        stcg_gain = 0
-        crypto_gain = 0
-        total_proceeds = 0
-        for sale_slice in sale_slices:
-            gain = sale_slice.gain_inr
-            total_proceeds += sale_slice.proceeds_inr
-            classification = "LTCG" if sale_slice.lot.is_long_term else "STCG"
-            rate = 0.125 if classification == "LTCG" else 0.20
-            if sale_slice.lot.asset_class == AssetClass.CRYPTO:
-                classification = "CRYPTO"
-                rate = 0.30
-            if classification == "LTCG":
-                ltcg_gain += gain
-            elif classification == "STCG":
-                stcg_gain += gain
-            elif classification == "CRYPTO":
-                crypto_gain += gain
-            tax_inr = 0
-            if classification == "LTCG":
-                taxable = max(min(gain, max(ltcg_gain - remaining_exemption, 0)), 0)
-                tax_inr = taxable * rate
-            elif classification == "STCG":
-                tax_inr = max(gain, 0) * rate
-            elif classification == "CRYPTO":
-                tax_inr = max(gain, 0) * rate
-            lot_breakdown.append(
-                {
-                    "lot_id": sale_slice.lot.asset_id,
-                    "quantity": float(sale_slice.quantity),
-                    "acquisition_date": sale_slice.lot.acquisition_date.isoformat(),
-                    "cost_basis_per_unit": float(sale_slice.lot.cost_basis_per_unit),
-                    "holding_days": sale_slice.lot.holding_days,
-                    "classification": classification,
-                    "gain_inr": float(gain),
-                    "tax_rate": rate,
-                    "tax_inr": float(money(tax_inr)),
-                }
-            )
-        effective_ltcg_taxable = max(decimalize(ltcg_gain) - decimalize(remaining_exemption), 0)
-        total_tax = (
-            effective_ltcg_taxable * decimalize("0.125")
-            + max(decimalize(stcg_gain), 0) * decimalize("0.20")
-            + max(decimalize(crypto_gain), 0) * decimalize("0.30")
-        )
 
-        recommendation = "All matched lots are already long-term. Proceed if liquidity is needed."
-        wait_recommendation = False
-        alternative = "No near-term LTCG unlock difference detected."
-        same_symbol = self.repository.get_assets_by_symbol(member_id, symbol)
-        pending_unlocks = [
-            self.equity_tax.optimal_sell_date(lot)
-            for lot in same_symbol
-            if lot.asset_class in {AssetClass.EQUITY, AssetClass.MF, AssetClass.US_EQUITY}
-        ]
-        pending_unlocks = [item for item in pending_unlocks if item.unlock_date and item.tax_delta_inr > 0]
-        if pending_unlocks:
-            best = sorted(pending_unlocks, key=lambda item: item.tax_delta_inr, reverse=True)[0]
-            wait_recommendation = True
-            recommendation = f"Waiting for the next LTCG unlock on {best.unlock_date.isoformat()} can improve post-tax proceeds."
-            alternative = best.recommendation
+        tracker = LotTracker()
+        tracker.add_lots(lots)
 
-        return {
-            "sale_summary": {
-                "symbol": symbol,
-                "quantity": float(decimalize(quantity)),
-                "current_price_inr": float(sale_slices[0].lot.current_price),
-                "total_proceeds_inr": float(money(total_proceeds)),
-            },
-            "lot_breakdown": lot_breakdown,
-            "tax_summary": {
-                "total_gain_inr": float(money(decimalize(ltcg_gain) + decimalize(stcg_gain) + decimalize(crypto_gain))),
-                "ltcg_this_transaction": float(money(ltcg_gain)),
-                "ltcg_ytd_before_this": float(money(state.ltcg_realized_inr)),
-                "ltcg_exemption_remaining": float(money(remaining_exemption)),
-                "effective_ltcg_taxable": float(money(effective_ltcg_taxable)),
-                "stcg_taxable": float(money(max(decimalize(stcg_gain), 0))),
-                "total_tax_inr": float(money(total_tax)),
-            },
-            "advisory": {
-                "wait_recommendation": wait_recommendation,
-                "reason": recommendation,
-                "alternative": alternative,
-            },
-        }
+        return tracker.simulate_sale(
+            member_id=member_id,
+            symbol=symbol,
+            quantity=qty_decimal,
+            sale_price=price_decimal,
+            ytd_realized_ltcg=state.ltcg_realized_inr,
+        )
 
     def ltcg_calendar(self, window_days: int = 90) -> dict:
         assets = [

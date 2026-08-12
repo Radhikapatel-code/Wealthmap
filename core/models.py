@@ -129,21 +129,29 @@ class TaxBreakdown:
 
 @dataclass
 class AssetLot:
-    lot_id: str
-    symbol: str
-    asset_class: AssetClass
-    platform: Platform
-    member_id: str
-    quantity: Decimal
-    acquisition_date: date
-    cost_basis_per_unit: Decimal        # Always in INR
-    current_price: Decimal              # Always in INR
+    lot_id: str = ""
+    symbol: str = ""
+    asset_class: AssetClass = AssetClass.EQUITY
+    platform: Platform = Platform.MANUAL
+    member_id: str = ""
+    quantity: Decimal = Decimal("0")
+    acquisition_date: date = field(default_factory=date.today)
+    cost_basis_per_unit: Decimal = Decimal("0")
+    current_price: Decimal = Decimal("0")
     grandfathered_cost: Optional[Decimal] = None  # For pre-2018 equity
 
     # Optional metadata
     isin: Optional[str] = None
     name: Optional[str] = None
     exchange: Optional[str] = None
+    asset_id: Optional[str] = None
+    metadata: dict = field(default_factory=dict)
+
+    def __post_init__(self):
+        if self.asset_id and not self.lot_id:
+            self.lot_id = self.asset_id
+        elif self.lot_id and not self.asset_id:
+            self.asset_id = self.lot_id
 
     # ── Computed Properties ──────────────────
 
@@ -294,12 +302,29 @@ class TLHOpportunity:
     loss_amount: Decimal
     risk_notes: list[str] = field(default_factory=list)
 
+    @property
+    def symbol(self) -> str:
+        return self.loss_lot.symbol
+
+    @property
+    def estimated_post_tax_benefit_inr(self) -> float:
+        return float(self.net_tax_saving)
+
+    def __getitem__(self, item: str):
+        if item == "symbol":
+            return self.loss_lot.symbol
+        elif item == "estimated_post_tax_benefit_inr":
+            return float(self.net_tax_saving)
+        return self.to_dict()[item]
+
     def to_dict(self) -> dict:
         return {
+            "symbol": self.loss_lot.symbol,
             "loss_symbol": self.loss_lot.symbol,
             "loss_lot_id": self.loss_lot.lot_id,
             "unrealized_loss_inr": float(self.loss_amount),
             "net_tax_saving_inr": float(self.net_tax_saving),
+            "estimated_post_tax_benefit_inr": float(self.net_tax_saving),
             "can_offset_symbols": [l.symbol for l in self.offsettable_gain_lots],
             "risk_notes": self.risk_notes,
         }
