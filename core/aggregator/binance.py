@@ -60,6 +60,27 @@ class BinanceAggregator:
                 except Exception:
                     price_inr = Decimal("0")
 
+                # Fetch cost basis and acquisition date from trade history
+                cost_basis_inr = Decimal("0")
+                acq_date = date.today()
+                try:
+                    trades = self._client.get_my_trades(symbol=f"{asset}USDT")
+                    buy_trades = [t for t in trades if t.get("isBuyer", True)]
+                    if buy_trades:
+                        total_buy_qty = sum(Decimal(str(t["qty"])) for t in buy_trades)
+                        total_buy_cost = sum(
+                            Decimal(str(t["qty"])) * self._usdt_to_inr(Decimal(str(t["price"])))
+                            for t in buy_trades
+                        )
+                        if total_buy_qty > 0:
+                            cost_basis_inr = (total_buy_cost / total_buy_qty).quantize(Decimal("0.01"))
+                        earliest_timestamp = min(t["time"] for t in buy_trades)
+                        acq_date = date.fromtimestamp(earliest_timestamp / 1000)
+                    else:
+                        logger.warning(f"No buy trades found for Binance asset {asset}; defaulting cost basis to 0.")
+                except Exception as te:
+                    logger.warning(f"Failed to fetch trade history for Binance asset {asset}: {te}. Defaulting cost basis to 0.")
+
                 lots.append(AssetLot(
                     lot_id=f"BNB-{asset}-{str(uuid.uuid4())[:8]}",
                     symbol=asset,
@@ -67,8 +88,8 @@ class BinanceAggregator:
                     platform=Platform.BINANCE,
                     member_id=member_id,
                     quantity=qty,
-                    acquisition_date=date.today(),  # Need trade history for accurate date
-                    cost_basis_per_unit=Decimal("0"),  # Needs historical order data
+                    acquisition_date=acq_date,
+                    cost_basis_per_unit=cost_basis_inr,
                     current_price=price_inr,
                     name=asset,
                 ))

@@ -70,6 +70,7 @@ class EquityTaxEngine:
         self,
         lots: list[AssetLot],
         look_ahead_days: int = 90,
+        ytd_realized_ltcg: Decimal = Decimal("0"),
     ) -> list[UnlockEvent]:
         """
         Returns upcoming LTCG unlock events within look_ahead_days.
@@ -78,6 +79,7 @@ class EquityTaxEngine:
         today = date.today()
         cutoff = today + timedelta(days=look_ahead_days)
         events: list[UnlockEvent] = []
+        remaining_exemption = max(TaxConstants.LTCG_EXEMPTION - ytd_realized_ltcg, Decimal("0"))
 
         for lot in lots:
             if lot.asset_class not in (AssetClass.EQUITY, AssetClass.MUTUAL_FUND):
@@ -91,8 +93,9 @@ class EquityTaxEngine:
             if today <= unlock_date <= cutoff:
                 gain = lot.unrealized_gain
                 stcg_tax = (gain * TaxConstants.STCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                ltcg_tax = (gain * TaxConstants.LTCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                saving = stcg_tax - ltcg_tax
+                taxable_ltcg = max(gain - remaining_exemption, Decimal("0"))
+                ltcg_tax = (taxable_ltcg * TaxConstants.LTCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                saving = max(stcg_tax - ltcg_tax, Decimal("0"))
 
                 events.append(UnlockEvent(
                     lot_id=lot.lot_id,
@@ -145,7 +148,11 @@ class EquityTaxEngine:
             "ytd_tax_paid_inr": float(total_tax),
         }
 
-    def optimal_sell_recommendation(self, lot: AssetLot) -> dict:
+    def optimal_sell_recommendation(
+        self,
+        lot: AssetLot,
+        ytd_realized_ltcg: Decimal = Decimal("0"),
+    ) -> dict:
         """
         For a single STCG lot, compute the tax delta between selling today
         vs. waiting for LTCG classification.
@@ -158,18 +165,23 @@ class EquityTaxEngine:
                 "current_gain_inr": float(gain),
             }
 
+        remaining_exemption = max(TaxConstants.LTCG_EXEMPTION - ytd_realized_ltcg, Decimal("0"))
+
         if lot.is_long_term:
-            ltcg_tax = (max(gain - TaxConstants.LTCG_EXEMPTION, Decimal("0")) * TaxConstants.LTCG_RATE)
+            taxable_gain = max(gain - remaining_exemption, Decimal("0"))
+            ltcg_tax = (taxable_gain * TaxConstants.LTCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             return {
                 "recommendation": "SELL_NOW",
                 "reason": "Lot already qualifies for LTCG treatment.",
                 "current_gain_inr": float(gain),
                 "estimated_tax_inr": float(ltcg_tax),
+                "remaining_exemption_inr": float(remaining_exemption),
             }
 
-        stcg_tax = gain * TaxConstants.STCG_RATE
-        ltcg_tax = max(gain - TaxConstants.LTCG_EXEMPTION, Decimal("0")) * TaxConstants.LTCG_RATE
-        saving = stcg_tax - ltcg_tax
+        stcg_tax = (gain * TaxConstants.STCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        taxable_ltcg = max(gain - remaining_exemption, Decimal("0"))
+        ltcg_tax = (taxable_ltcg * TaxConstants.LTCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        saving = max(stcg_tax - ltcg_tax, Decimal("0"))
 
         return {
             "recommendation": "WAIT_FOR_LTCG" if saving > Decimal("2000") else "SELL_NOW_ACCEPTABLE",
@@ -179,4 +191,5 @@ class EquityTaxEngine:
             "ltcg_tax_if_waited_inr": float(ltcg_tax),
             "tax_saving_inr": float(saving),
             "current_gain_inr": float(gain),
+            "remaining_exemption_inr": float(remaining_exemption),
         }

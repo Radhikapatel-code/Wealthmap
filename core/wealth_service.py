@@ -178,15 +178,31 @@ class WealthService:
         assets = [
             asset
             for asset in self.repository.list_assets()
-            if asset.asset_class in {AssetClass.EQUITY, AssetClass.MF, AssetClass.US_EQUITY}
+            if asset.asset_class in {AssetClass.EQUITY, AssetClass.MF, AssetClass.MUTUAL_FUND, AssetClass.US_EQUITY}
         ]
+        ytd_ltcg = sum(
+            self.repository.get_realized_state(m.member_id).ltcg_realized_inr
+            for m in self.repository.list_members()
+        )
         return {
-            "events": self.tax_calendar.ltcg_unlock_events(assets, window_days=window_days),
+            "events": self.tax_calendar.ltcg_unlock_events(assets, look_ahead_days=window_days, ytd_realized_ltcg=ytd_ltcg),
             "window_days": window_days,
         }
 
     def tlh_opportunities(self) -> dict:
-        opportunities = self.tlh_scanner.scan(self.repository.list_assets())
+        ytd_ltcg = sum(
+            self.repository.get_realized_state(m.member_id).ltcg_realized_inr
+            for m in self.repository.list_members()
+        )
+        ytd_stcg = sum(
+            self.repository.get_realized_state(m.member_id).stcg_realized_inr
+            for m in self.repository.list_members()
+        )
+        opportunities = self.tlh_scanner.scan(
+            self.repository.list_assets(),
+            ytd_realized_ltcg=ytd_ltcg,
+            ytd_realized_stcg=ytd_stcg,
+        )
         return {
             "opportunities": opportunities,
             "count": len(opportunities),

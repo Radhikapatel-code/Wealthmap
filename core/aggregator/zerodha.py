@@ -45,21 +45,51 @@ class ZerodhaAggregator:
 
         try:
             holdings = self._kite.holdings()
+            trade_dates = {}
+            try:
+                trades = self._kite.trades()
+                for t in trades:
+                    tsym = t.get("tradingsymbol")
+                    ttime = t.get("fill_timestamp") or t.get("order_timestamp") or t.get("exchange_timestamp")
+                    if tsym and ttime:
+                        d = ttime.date() if hasattr(ttime, "date") else date.fromisoformat(str(ttime)[:10])
+                        if tsym not in trade_dates or d < trade_dates[tsym]:
+                            trade_dates[tsym] = d
+            except Exception as te:
+                logger.debug(f"Kite trades fetch note: {te}")
+
             lots = []
             for h in holdings:
                 if h.get("quantity", 0) == 0:
                     continue
+
+                tsym = h.get("tradingsymbol", "")
+                acq_date = trade_dates.get(tsym)
+                if not acq_date and h.get("purchased_date"):
+                    try:
+                        acq_date = date.fromisoformat(str(h["purchased_date"])[:10])
+                    except Exception:
+                        pass
+                if not acq_date and h.get("created_at"):
+                    try:
+                        acq_date = date.fromisoformat(str(h["created_at"])[:10])
+                    except Exception:
+                        pass
+                if not acq_date:
+                    acq_date = date.today()
+                    logger.warning(f"Acquisition date not exposed by Kite for {tsym}; defaulting to date.today()")
+
                 lot = AssetLot(
-                    lot_id=f"ZRD-{h['tradingsymbol']}-{str(uuid.uuid4())[:8]}",
-                    symbol=f"{h['tradingsymbol']}.NS",
+                    lot_id=f"ZRD-{tsym}-{str(uuid.uuid4())[:8]}",
+                    symbol=f"{tsym}.NS" if not tsym.endswith(".NS") else tsym,
                     asset_class=AssetClass.EQUITY,
                     platform=Platform.ZERODHA,
                     member_id=member_id,
                     quantity=Decimal(str(h["quantity"])),
-                    acquisition_date=date.today(),   # Kite doesn't expose acquisition date directly
+                    acquisition_date=acq_date,
                     cost_basis_per_unit=Decimal(str(h["average_price"])),
                     current_price=Decimal(str(h.get("last_price", h["average_price"]))),
-                    name=h.get("tradingsymbol"),
+                    name=tsym,
                     exchange=h.get("exchange", "NSE"),
                 )
                 lots.append(lot)

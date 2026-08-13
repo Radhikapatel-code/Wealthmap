@@ -344,5 +344,88 @@ class TestFYBoundary:
         assert fy_end.day == 31
 
 
+# ── Bug Fix & Edge Case Tests ──────────────────────────────────────────────────
+
+class TestOptimalSellAndCalendarFixes:
+
+    def test_optimal_sell_recommendation_respects_ytd_realized_ltcg(self):
+        engine = EquityTaxEngine()
+        lot = make_equity_lot(days_held=200, qty=100, cost=1000, current=2000)  # gain = 100,000
+
+        # Case 1: 0 YTD realized LTCG -> remaining exemption = 125,000.
+        # If waited for LTCG, taxable LTCG = max(100k - 125k, 0) = 0. LTCG tax = 0.
+        rec_fresh = engine.optimal_sell_recommendation(lot, ytd_realized_ltcg=Decimal("0"))
+        assert rec_fresh["remaining_exemption_inr"] == 125000.0
+        assert rec_fresh["ltcg_tax_if_waited_inr"] == 0.0
+
+        # Case 2: YTD realized LTCG = 100,000 -> remaining exemption = 25,000.
+        # If waited for LTCG, taxable LTCG = 100k - 25k = 75,000. LTCG tax = 75k * 12.5% = 9,375.
+        rec_part = engine.optimal_sell_recommendation(lot, ytd_realized_ltcg=Decimal("100000"))
+        assert rec_part["remaining_exemption_inr"] == 25000.0
+        assert rec_part["ltcg_tax_if_waited_inr"] == 9375.0
+
+        # Case 3: YTD realized LTCG = 150,000 -> remaining exemption = 0.
+        # If waited for LTCG, taxable LTCG = 100k. LTCG tax = 100k * 12.5% = 12,500.
+        rec_used = engine.optimal_sell_recommendation(lot, ytd_realized_ltcg=Decimal("150000"))
+        assert rec_used["remaining_exemption_inr"] == 0.0
+        assert rec_used["ltcg_tax_if_waited_inr"] == 12500.0
+
+    def test_tax_calendar_ltcg_unlock_events_uses_equity_engine_and_ytd_ltcg(self):
+        from core.tax.tax_calendar import TaxCalendar
+        calendar = TaxCalendar()
+        lot = make_equity_lot(days_held=300, qty=100, cost=1000, current=2000)  # unlocks in 65 days
+
+        events_fresh = calendar.ltcg_unlock_events([lot], look_ahead_days=90, ytd_realized_ltcg=Decimal("0"))
+        assert len(events_fresh) == 1
+        assert events_fresh[0]["ltcg_tax_after_unlock_inr"] == 0.0
+
+        events_exhausted = calendar.ltcg_unlock_events([lot], look_ahead_days=90, ytd_realized_ltcg=Decimal("150000"))
+        assert len(events_exhausted) == 1
+        assert events_exhausted[0]["ltcg_tax_after_unlock_inr"] == 12500.0
+
+
+class TestDebtMFTaxCutoffDate:
+
+    def test_post_april_2023_debt_mf_always_slab_rate(self):
+        from core.tax.mf_tax import MFTaxEngine
+        engine = MFTaxEngine()
+        # Purchased post April 1, 2023 (e.g., 2023-05-01)
+        lot = AssetLot(
+            lot_id="DEBT-POST-2023",
+            symbol="HDFC_DEBT",
+            asset_class=AssetClass.MUTUAL_FUND,
+            platform=Platform.ZERODHA,
+            member_id="test",
+            quantity=Decimal("100"),
+            acquisition_date=date(2023, 5, 1),
+            cost_basis_per_unit=Decimal("100"),
+            current_price=Decimal("150"),
+        )
+        res = engine.compute_tax(lot, mf_type="DEBT", tax_slab_rate=Decimal("0.30"))
+        assert res["treatment"] == "SLAB_RATE"
+        assert res["tax_rate"] == 0.30
+        assert "Apr 1 2023" in res["note"]
+
+    def test_pre_april_2023_debt_mf_qualifies_for_ltcg_if_held_3_years(self):
+        from core.tax.mf_tax import MFTaxEngine
+        engine = MFTaxEngine()
+        # Purchased pre April 1, 2023 (e.g., 2020-01-01)
+        lot = AssetLot(
+            lot_id="DEBT-PRE-2023-LT",
+            symbol="ICICI_DEBT",
+            asset_class=AssetClass.MUTUAL_FUND,
+            platform=Platform.ZERODHA,
+            member_id="test",
+            quantity=Decimal("100"),
+            acquisition_date=date(2020, 1, 1),
+            cost_basis_per_unit=Decimal("100"),
+            current_price=Decimal("150"),
+        )
+        res = engine.compute_tax(lot, mf_type="DEBT", tax_slab_rate=Decimal("0.30"))
+        assert res["treatment"] == "LTCG"
+        assert res["tax_rate"] == 0.20
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+

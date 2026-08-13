@@ -37,30 +37,69 @@ class TLHScanner:
 
         for loss_lot in loss_lots:
             loss_amount = abs(loss_lot.unrealized_gain)
+            remaining_loss = loss_amount
             offsettable_gains = []
             net_saving = Decimal("0")
             risk_notes = []
 
             # LTCG loss: can only offset LTCG
             if loss_lot.is_long_term:
-                offsettable = [g for g in gain_lots if g.is_long_term]
-                for gain_lot in offsettable:
-                    offset = min(loss_amount, gain_lot.unrealized_gain)
-                    saving = (offset * TaxConstants.LTCG_RATE).quantize(
-                        Decimal("0.01"), rounding=ROUND_HALF_UP
-                    )
+                # 1. Offset against YTD realized LTCG (above exemption) if available
+                taxable_realized_ltcg = max(ytd_realized_ltcg - TaxConstants.LTCG_EXEMPTION, Decimal("0"))
+                if taxable_realized_ltcg > 0 and remaining_loss > 0:
+                    offset = min(remaining_loss, taxable_realized_ltcg)
+                    saving = (offset * TaxConstants.LTCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
                     net_saving += saving
-                    offsettable_gains.append(gain_lot)
+                    remaining_loss -= offset
+                    risk_notes.append(f"Offsets ₹{float(offset):,.2f} of YTD realized LTCG.")
+
+                # 2. Offset against unrealized LTCG gain lots
+                if remaining_loss > 0:
+                    offsettable = [g for g in gain_lots if g.is_long_term]
+                    for gain_lot in offsettable:
+                        if remaining_loss <= 0:
+                            break
+                        offset = min(remaining_loss, gain_lot.unrealized_gain)
+                        saving = (offset * TaxConstants.LTCG_RATE).quantize(
+                            Decimal("0.01"), rounding=ROUND_HALF_UP
+                        )
+                        net_saving += saving
+                        remaining_loss -= offset
+                        offsettable_gains.append(gain_lot)
+
                 risk_notes.append("LTCG loss: can only offset LTCG gains.")
             else:
                 # STCG loss: can offset both STCG and LTCG
-                offsettable = gain_lots  # All gains
-                for gain_lot in offsettable:
-                    offset = min(loss_amount, gain_lot.unrealized_gain)
-                    rate = TaxConstants.LTCG_RATE if gain_lot.is_long_term else TaxConstants.STCG_RATE
-                    saving = (offset * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                # 1. Offset against YTD realized STCG first (saves 20%)
+                if ytd_realized_stcg > 0 and remaining_loss > 0:
+                    offset = min(remaining_loss, ytd_realized_stcg)
+                    saving = (offset * TaxConstants.STCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
                     net_saving += saving
-                    offsettable_gains.append(gain_lot)
+                    remaining_loss -= offset
+                    risk_notes.append(f"Offsets ₹{float(offset):,.2f} of YTD realized STCG.")
+
+                # 2. Offset against YTD realized LTCG next (saves 12.5% on taxable portion)
+                taxable_realized_ltcg = max(ytd_realized_ltcg - TaxConstants.LTCG_EXEMPTION, Decimal("0"))
+                if taxable_realized_ltcg > 0 and remaining_loss > 0:
+                    offset = min(remaining_loss, taxable_realized_ltcg)
+                    saving = (offset * TaxConstants.LTCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    net_saving += saving
+                    remaining_loss -= offset
+                    risk_notes.append(f"Offsets ₹{float(offset):,.2f} of YTD realized LTCG.")
+
+                # 3. Offset against unrealized gain lots (STCG gains first, then LTCG gains)
+                if remaining_loss > 0:
+                    stcg_gains = [g for g in gain_lots if not g.is_long_term]
+                    ltcg_gains = [g for g in gain_lots if g.is_long_term]
+                    for gain_lot in stcg_gains + ltcg_gains:
+                        if remaining_loss <= 0:
+                            break
+                        offset = min(remaining_loss, gain_lot.unrealized_gain)
+                        rate = TaxConstants.LTCG_RATE if gain_lot.is_long_term else TaxConstants.STCG_RATE
+                        saving = (offset * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                        net_saving += saving
+                        remaining_loss -= offset
+                        offsettable_gains.append(gain_lot)
 
             # India has no formal wash-sale rule but flag re-buy risk
             risk_notes.append(

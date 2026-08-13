@@ -66,43 +66,56 @@ class TaxCalendar:
         self,
         lots: list[AssetLot],
         look_ahead_days: int = 90,
+        ytd_realized_ltcg: Decimal = Decimal("0"),
+        **kwargs,
     ) -> list[dict]:
         """All LTCG unlock events within the look-ahead window."""
-        today = date.today()
-        cutoff = today + timedelta(days=look_ahead_days)
+        if "window_days" in kwargs:
+            look_ahead_days = kwargs["window_days"]
+
+        from core.tax.equity_tax import EquityTaxEngine
+        from decimal import ROUND_HALF_UP
+        engine = EquityTaxEngine()
+        unlock_events = engine.ltcg_unlock_calendar(
+            lots, look_ahead_days=look_ahead_days, ytd_realized_ltcg=ytd_realized_ltcg
+        )
+
+        lot_map = {l.lot_id: l for l in lots}
+        remaining_exemption = max(TaxConstants.LTCG_EXEMPTION - ytd_realized_ltcg, Decimal("0"))
+
         events = []
+        for e in unlock_events:
+            lot = lot_map.get(e.lot_id)
+            name = lot.name if (lot and lot.name) else e.symbol
+            acq_date = lot.acquisition_date.isoformat() if lot else ""
 
-        for lot in lots:
-            if lot.asset_class not in (AssetClass.EQUITY, AssetClass.MUTUAL_FUND):
-                continue
-            if lot.is_long_term:
-                continue
+            gain = e.current_gain_inr
+            stcg_tax = (gain * TaxConstants.STCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            taxable_ltcg = max(gain - remaining_exemption, Decimal("0"))
+            ltcg_tax = (taxable_ltcg * TaxConstants.LTCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            saving = e.tax_saving_inr
 
-            unlock_date = lot.acquisition_date + timedelta(days=TaxConstants.EQUITY_LONG_TERM_DAYS)
-            if today <= unlock_date <= cutoff:
-                gain = lot.unrealized_gain
-                stcg_tax = gain * TaxConstants.STCG_RATE if gain > 0 else Decimal("0")
-                ltcg_tax = max(gain - TaxConstants.LTCG_EXEMPTION, Decimal("0")) * TaxConstants.LTCG_RATE
-                saving = max(stcg_tax - ltcg_tax, Decimal("0"))
+            events.append({
+                "lot_id": e.lot_id,
+                "symbol": e.symbol,
+                "name": name,
+                "member_id": e.member_id,
+                "acquisition_date": acq_date,
+                "unlock_date": e.unlock_date.isoformat(),
+                "days_remaining": e.days_remaining,
+                "quantity": float(e.quantity),
+                "unrealized_gain_inr": float(gain),
+                "stcg_tax_if_sold_today_inr": float(stcg_tax),
+                "ltcg_tax_after_unlock_inr": float(ltcg_tax),
+                "potential_saving_inr": float(saving),
+                "worth_waiting": saving > Decimal("1000"),
+            })
 
-                events.append({
-                    "lot_id": lot.lot_id,
-                    "symbol": lot.symbol,
-                    "name": lot.name or lot.symbol,
-                    "member_id": lot.member_id,
-                    "acquisition_date": lot.acquisition_date.isoformat(),
-                    "unlock_date": unlock_date.isoformat(),
-                    "days_remaining": (unlock_date - today).days,
-                    "quantity": float(lot.quantity),
-                    "unrealized_gain_inr": float(gain),
-                    "stcg_tax_if_sold_today_inr": float(stcg_tax),
-                    "ltcg_tax_after_unlock_inr": float(ltcg_tax),
-                    "potential_saving_inr": float(saving),
-                    "worth_waiting": saving > Decimal("1000"),
-                })
-
-        events.sort(key=lambda e: e["days_remaining"])
+        events.sort(key=lambda x: x["days_remaining"])
         return events
+
+    # Alias for method compatibility
+    advance_tax_schedule = advance_tax_dates
 
     def fd_tds_alerts(self, fd_assets: list[dict]) -> list[dict]:
         """
