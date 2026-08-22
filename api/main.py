@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Depends, Query, Security, status
+from fastapi import FastAPI, HTTPException, Depends, Query, Header, Security, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
 
@@ -44,6 +44,18 @@ _ltcg_watcher = LTCGWatcher()
 _tds_tracker = TDSTracker()
 
 
+def get_session_id(
+    x_session_id: Optional[str] = Header(None, alias="X-Session-ID"),
+    x_family_id: Optional[str] = Header(None, alias="X-Family-ID"),
+    session_id: Optional[str] = Query(None),
+) -> str:
+    """Resolve session/family ID for multi-tenant isolation."""
+    for val in (x_session_id, x_family_id, session_id):
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return "default"
+
+
 def verify_api_key(
     api_key_header_val: Optional[str] = Security(api_key_header),
     bearer_creds: Optional[HTTPAuthorizationCredentials] = Security(bearer_auth),
@@ -65,9 +77,8 @@ def verify_api_key(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    settings = get_settings()
-    _state_manager.initialize_demo()
-    logger.info("WealthMap initialized with secure state manager.")
+    _state_manager.initialize_demo("default")
+    logger.info("WealthMap initialized with multi-session state manager.")
     yield
     logger.info("WealthMap shutting down.")
 
@@ -95,14 +106,14 @@ def health():
 
 
 @app.get("/portfolio/family", tags=["Portfolio"], dependencies=[Depends(verify_api_key)])
-def get_family_portfolio():
-    family = _state_manager.get_family()
+def get_family_portfolio(session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     return family.to_summary_dict()
 
 
 @app.get("/portfolio/member/{member_id}", tags=["Portfolio"], dependencies=[Depends(verify_api_key)])
-def get_member_portfolio(member_id: str):
-    family = _state_manager.get_family()
+def get_member_portfolio(member_id: str, session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     member = family.get_member(member_id)
     if not member:
         raise HTTPException(status_code=404, detail=f"Member '{member_id}' not found.")
@@ -118,8 +129,8 @@ def get_member_portfolio(member_id: str):
 
 
 @app.get("/portfolio/net-worth", tags=["Portfolio"], dependencies=[Depends(verify_api_key)])
-def get_net_worth():
-    family = _state_manager.get_family()
+def get_net_worth(session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     return {
         "total_net_worth_inr": float(family.total_net_worth),
         "asset_class_breakdown": family.asset_class_breakdown(),
@@ -139,9 +150,9 @@ def get_net_worth():
 
 
 @app.post("/portfolio/manual-asset", tags=["Portfolio"], dependencies=[Depends(verify_api_key)])
-def add_manual_asset(request: ManualAssetRequest):
-    family = _state_manager.get_family()
-    tracker = _state_manager.get_lot_tracker()
+def add_manual_asset(request: ManualAssetRequest, session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
+    tracker = _state_manager.get_lot_tracker(session_id)
     member = family.get_member(request.member_id)
     if not member:
         raise HTTPException(status_code=404, detail=f"Member '{request.member_id}' not found.")
@@ -162,14 +173,14 @@ def add_manual_asset(request: ManualAssetRequest):
 
 
 @app.get("/tax/liability", tags=["Tax"], dependencies=[Depends(verify_api_key)])
-def get_tax_liability():
-    family = _state_manager.get_family()
+def get_tax_liability(session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     return family.ytd_tax_summary()
 
 
 @app.get("/tax/ltcg-calendar", tags=["Tax"], dependencies=[Depends(verify_api_key)])
-def get_ltcg_calendar(days: int = Query(default=90, ge=7, le=365)):
-    family = _state_manager.get_family()
+def get_ltcg_calendar(days: int = Query(default=90, ge=7, le=365), session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     events = _tax_calendar.ltcg_unlock_events(family.all_lots, look_ahead_days=days)
     return {
         "look_ahead_days": days,
@@ -183,9 +194,10 @@ def get_ltcg_calendar(days: int = Query(default=90, ge=7, le=365)):
 def simulate_sale(
     request: SimulateSaleRequest,
     use_rust: bool = Query(default=False, description="Execute simulation using high-performance Rust engine"),
+    session_id: str = Depends(get_session_id),
 ):
-    family = _state_manager.get_family()
-    tracker = _state_manager.get_lot_tracker()
+    family = _state_manager.get_family(session_id)
+    tracker = _state_manager.get_lot_tracker(session_id)
     member = family.get_member(request.member_id)
     if not member:
         raise HTTPException(status_code=404, detail=f"Member '{request.member_id}' not found.")
@@ -247,16 +259,16 @@ def simulate_sale(
 
 
 @app.get("/tax/tlh-opportunities", tags=["Tax"], dependencies=[Depends(verify_api_key)])
-def get_tlh_opportunities():
-    family = _state_manager.get_family()
+def get_tlh_opportunities(session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     ytd_ltcg = sum(m.ytd_realized_ltcg for m in family.members)
     ytd_stcg = sum(m.ytd_realized_stcg for m in family.members)
     return _tlh_scanner.generate_report(family.all_lots, ytd_ltcg, ytd_stcg)
 
 
 @app.get("/tax/advance-tax", tags=["Tax"], dependencies=[Depends(verify_api_key)])
-def get_advance_tax():
-    family = _state_manager.get_family()
+def get_advance_tax(session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     tax_summary = family.ytd_tax_summary()
     estimated = Decimal(str(tax_summary.get("estimated_total_tax_inr", 0)))
     ytd_paid = sum(m.ytd_tax_paid for m in family.members)
@@ -274,20 +286,20 @@ def get_key_dates():
 
 
 @app.get("/family/members", tags=["Family"], dependencies=[Depends(verify_api_key)])
-def get_family_members():
-    family = _state_manager.get_family()
+def get_family_members(session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     return {"members": [m.to_dict() for m in family.members]}
 
 
 @app.get("/family/gift-alerts", tags=["Family"], dependencies=[Depends(verify_api_key)])
-def get_gift_alerts():
-    family = _state_manager.get_family()
+def get_gift_alerts(session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     return {"alerts": family.gift_tax_alerts()}
 
 
 @app.post("/ai/portfolio-health", response_model=AIResponse, tags=["AI"], dependencies=[Depends(verify_api_key)])
-def ai_portfolio_health():
-    family = _state_manager.get_family()
+def ai_portfolio_health(session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     cfo = _state_manager.get_cfo_engine()
     context = _context_builder.build_portfolio_context(family)
     response = cfo.portfolio_health(context)
@@ -295,8 +307,8 @@ def ai_portfolio_health():
 
 
 @app.post("/ai/tax-advice", response_model=AIResponse, tags=["AI"], dependencies=[Depends(verify_api_key)])
-def ai_tax_advice(request: Optional[ScenarioRequest] = None):
-    family = _state_manager.get_family()
+def ai_tax_advice(request: Optional[ScenarioRequest] = None, session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     cfo = _state_manager.get_cfo_engine()
     query = request.query if request else None
     context = _context_builder.build_tax_advice_context(family, specific_query=query)
@@ -305,8 +317,8 @@ def ai_tax_advice(request: Optional[ScenarioRequest] = None):
 
 
 @app.post("/ai/scenario", response_model=AIResponse, tags=["AI"], dependencies=[Depends(verify_api_key)])
-def ai_scenario(request: ScenarioRequest):
-    family = _state_manager.get_family()
+def ai_scenario(request: ScenarioRequest, session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     cfo = _state_manager.get_cfo_engine()
     context = _context_builder.build_scenario_context(
         family, request.query, request.additional_context
@@ -316,8 +328,8 @@ def ai_scenario(request: ScenarioRequest):
 
 
 @app.post("/ai/chat", response_model=AIResponse, tags=["AI"], dependencies=[Depends(verify_api_key)])
-def ai_chat(request: ChatRequest):
-    family = _state_manager.get_family()
+def ai_chat(request: ChatRequest, session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     cfo = _state_manager.get_cfo_engine()
     context = _context_builder.build_portfolio_context(family)
     response = cfo.chat(context, request.message, request.conversation_history)
@@ -325,8 +337,8 @@ def ai_chat(request: ChatRequest):
 
 
 @app.get("/ai/daily-digest", response_model=AIResponse, tags=["AI"], dependencies=[Depends(verify_api_key)])
-def ai_daily_digest():
-    family = _state_manager.get_family()
+def ai_daily_digest(session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     cfo = _state_manager.get_cfo_engine()
     context = _context_builder.build_daily_digest_context(family)
     response = cfo.daily_digest(context)
@@ -334,8 +346,8 @@ def ai_daily_digest():
 
 
 @app.get("/alerts", tags=["Alerts"], dependencies=[Depends(verify_api_key)])
-def get_all_alerts():
-    family = _state_manager.get_family()
+def get_all_alerts(session_id: str = Depends(get_session_id)):
+    family = _state_manager.get_family(session_id)
     ltcg_alerts = _ltcg_watcher.generate_alerts(family.all_lots)
     total_estimated_tax = Decimal(str(family.ytd_tax_summary().get("estimated_total_tax_inr", 0)))
     ytd_paid = sum(m.ytd_tax_paid for m in family.members)

@@ -6,7 +6,6 @@ using WealthMap's existing Python LotTracker / EquityTaxEngine logic,
 and exports the input transactions & expected outputs to JSON files in
 ../wealthmap-engine/testdata/
 """
-
 from __future__ import annotations
 import json
 import os
@@ -14,7 +13,6 @@ from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
-# Add project root to sys.path
 import sys
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -22,46 +20,39 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from core.models import AssetLot, AssetClass, Platform, TaxConstants, TaxClassification
 from core.tax.lot_tracker import LotTracker
 
+
+def get_fy_year(dt: date) -> int:
+    """Return FY start year (e.g. 2024-03-10 -> 2023 for FY 2023-24; 2024-04-10 -> 2024 for FY 2024-25)."""
+    return dt.year if dt.month >= 4 else dt.year - 1
+
+
 def build_golden_dataset():
     engine_testdata_dir = PROJECT_ROOT.parent / "wealthmap-engine" / "testdata"
     engine_testdata_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Synthesize input transactions across multiple accounts and tickers
-    # Format: dict with member_id, symbol, side (BUY/SELL), date, quantity, price, asset_class, lot_id
     raw_transactions = [
-        # --- Account: father | Symbol: RELIANCE.NS ---
         {"transaction_id": "TX-001", "member_id": "father", "symbol": "RELIANCE.NS", "side": "BUY", "date": "2023-01-15", "quantity": "100", "price": "2000.00", "asset_class": "EQUITY", "lot_id": "LOT-REL-1"},
         {"transaction_id": "TX-002", "member_id": "father", "symbol": "RELIANCE.NS", "side": "BUY", "date": "2023-06-20", "quantity": "50", "price": "2200.00", "asset_class": "EQUITY", "lot_id": "LOT-REL-2"},
-        {"transaction_id": "TX-003", "member_id": "father", "symbol": "RELIANCE.NS", "side": "SELL", "date": "2024-03-10", "quantity": "70", "price": "2500.00", "asset_class": "EQUITY", "lot_id": None}, # Consumes 70 from LOT-REL-1 (STCG)
-        {"transaction_id": "TX-004", "member_id": "father", "symbol": "RELIANCE.NS", "side": "SELL", "date": "2024-08-01", "quantity": "50", "price": "2800.00", "asset_class": "EQUITY", "lot_id": None}, # Consumes remaining 30 from LOT-REL-1 (LTCG) + 20 from LOT-REL-2 (LTCG)
+        {"transaction_id": "TX-003", "member_id": "father", "symbol": "RELIANCE.NS", "side": "SELL", "date": "2024-03-10", "quantity": "70", "price": "2500.00", "asset_class": "EQUITY", "lot_id": None},
+        {"transaction_id": "TX-004", "member_id": "father", "symbol": "RELIANCE.NS", "side": "SELL", "date": "2024-08-01", "quantity": "50", "price": "2800.00", "asset_class": "EQUITY", "lot_id": None},
 
-        # --- Account: father | Symbol: INFY.NS ---
         {"transaction_id": "TX-005", "member_id": "father", "symbol": "INFY.NS", "side": "BUY", "date": "2022-05-10", "quantity": "200", "price": "1400.00", "asset_class": "EQUITY", "lot_id": "LOT-INFY-1"},
         {"transaction_id": "TX-006", "member_id": "father", "symbol": "INFY.NS", "side": "BUY", "date": "2024-01-15", "quantity": "100", "price": "1500.00", "asset_class": "EQUITY", "lot_id": "LOT-INFY-2"},
-        {"transaction_id": "TX-007", "member_id": "father", "symbol": "INFY.NS", "side": "SELL", "date": "2024-09-20", "quantity": "250", "price": "1750.00", "asset_class": "EQUITY", "lot_id": None}, # Consumes 200 from LOT-INFY-1 (LTCG) + 50 from LOT-INFY-2 (STCG)
+        {"transaction_id": "TX-007", "member_id": "father", "symbol": "INFY.NS", "side": "SELL", "date": "2024-09-20", "quantity": "250", "price": "1750.00", "asset_class": "EQUITY", "lot_id": None},
 
-        # --- Account: mother | Symbol: HDFCBANK.NS ---
         {"transaction_id": "TX-008", "member_id": "mother", "symbol": "HDFCBANK.NS", "side": "BUY", "date": "2023-02-01", "quantity": "150", "price": "1600.00", "asset_class": "EQUITY", "lot_id": "LOT-HDFC-1"},
-        {"transaction_id": "TX-009", "member_id": "mother", "symbol": "HDFCBANK.NS", "side": "SELL", "date": "2024-05-15", "quantity": "100", "price": "1700.00", "asset_class": "EQUITY", "lot_id": None}, # Consumes 100 from LOT-HDFC-1 (LTCG)
+        {"transaction_id": "TX-009", "member_id": "mother", "symbol": "HDFCBANK.NS", "side": "SELL", "date": "2024-05-15", "quantity": "100", "price": "1700.00", "asset_class": "EQUITY", "lot_id": None},
 
-        # --- Account: son | Symbol: BTC ---
         {"transaction_id": "TX-010", "member_id": "son", "symbol": "BTC", "side": "BUY", "date": "2023-10-01", "quantity": "1.5", "price": "2500000.00", "asset_class": "CRYPTO", "lot_id": "LOT-BTC-1"},
-        {"transaction_id": "TX-011", "member_id": "son", "symbol": "BTC", "side": "SELL", "date": "2024-04-10", "quantity": "0.8", "price": "5000000.00", "asset_class": "CRYPTO", "lot_id": None}, # Consumes 0.8 from LOT-BTC-1 (CRYPTO 30%)
+        {"transaction_id": "TX-011", "member_id": "son", "symbol": "BTC", "side": "SELL", "date": "2024-04-10", "quantity": "0.8", "price": "5000000.00", "asset_class": "CRYPTO", "lot_id": None},
     ]
 
-    # Process FIFO matching per account and symbol
     matched_lots = []
-
-    # Group transactions by (member_id, symbol)
     groups = {}
     for tx in raw_transactions:
         key = (tx["member_id"], tx["symbol"])
         groups.setdefault(key, []).append(tx)
 
-    # Collect all (member_id, symbol) groups and sort them so that sells are
-    # processed in chronological order per member.  This lets us accumulate
-    # ytd_realized_ltcg correctly across symbols for the same individual
-    # (the ₹1,25,000 LTCG exemption is per-individual, not per-symbol).
     ordered_sells: list[tuple[str, str, dict]] = []
     trackers: dict[tuple[str, str], LotTracker] = {}
 
@@ -86,19 +77,21 @@ def build_golden_dataset():
                 ordered_sells.append((member_id, symbol, tx))
         trackers[(member_id, symbol)] = tracker
 
-    # Sort all sells chronologically so exemption is consumed in date order
     ordered_sells.sort(key=lambda x: x[2]["date"])
 
-    # Track per-member YTD realized LTCG for exemption accounting
-    member_ytd_ltcg: dict[str, Decimal] = {}
+    # Track per-member YTD realized LTCG keyed by (member_id, fy_year)
+    # Exemption resets every April 1st
+    member_fy_ytd_ltcg: dict[tuple[str, int], Decimal] = {}
 
     for member_id, symbol, tx in ordered_sells:
         tracker = trackers[(member_id, symbol)]
         sell_date = date.fromisoformat(tx["date"])
         sell_price = Decimal(tx["price"])
         sell_qty = Decimal(tx["quantity"])
+        fy_year = get_fy_year(sell_date)
+        fy_key = (member_id, fy_year)
 
-        ytd_ltcg = member_ytd_ltcg.get(member_id, Decimal("0"))
+        ytd_ltcg = member_fy_ytd_ltcg.get(fy_key, Decimal("0"))
         realized_txs = tracker.execute_sale(
             member_id=member_id,
             symbol=symbol,
@@ -108,12 +101,11 @@ def build_golden_dataset():
             ytd_realized_ltcg=ytd_ltcg,
         )
 
-        # Accumulate LTCG gains for this member's exemption tracking
         for rtx in realized_txs:
             if rtx.tax_breakdown.classification == TaxClassification.LTCG:
                 gain = rtx.tax_breakdown.gross_gain
                 if gain > Decimal("0"):
-                    member_ytd_ltcg[member_id] = member_ytd_ltcg.get(member_id, Decimal("0")) + gain
+                    member_fy_ytd_ltcg[fy_key] = member_fy_ytd_ltcg.get(fy_key, Decimal("0")) + gain
 
             matched_lots.append({
                 "member_id": rtx.member_id,
@@ -134,7 +126,6 @@ def build_golden_dataset():
                 "holding_days": (rtx.sale_date - rtx.acquisition_date).days,
             })
 
-    # Group aggregates per (member_id, symbol, classification)
     aggregates = {}
     for lot in matched_lots:
         key = (lot["member_id"], lot["symbol"], lot["classification"])
@@ -155,17 +146,14 @@ def build_golden_dataset():
 
     aggregate_list = list(aggregates.values())
 
-    # Write input transactions file
     tx_file = engine_testdata_dir / "golden_transactions.json"
     with open(tx_file, "w") as f:
         json.dump(raw_transactions, f, indent=2)
 
-    # Write expected matched lots output file
     lots_file = engine_testdata_dir / "golden_matched_lots.json"
     with open(lots_file, "w") as f:
         json.dump(matched_lots, f, indent=2)
 
-    # Write expected aggregates output file
     agg_file = engine_testdata_dir / "golden_aggregates.json"
     with open(agg_file, "w") as f:
         json.dump(aggregate_list, f, indent=2)
@@ -174,6 +162,7 @@ def build_golden_dataset():
     print(f"  - Transactions: {len(raw_transactions)}")
     print(f"  - Matched Lots: {len(matched_lots)}")
     print(f"  - Aggregates:   {len(aggregate_list)}")
+
 
 if __name__ == "__main__":
     build_golden_dataset()

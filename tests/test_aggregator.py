@@ -63,7 +63,7 @@ def test_binance_aggregator_computes_cost_basis_and_trade_date(monkeypatch):
     from decimal import Decimal
     from core.aggregator.binance import BinanceAggregator
 
-    aggregator = BinanceAggregator(api_key="mock_key", api_secret="mock_secret")
+    aggregator = BinanceAggregator(api_key="mock_key", api_secret="mock_secret", usd_inr_rate=Decimal("83.50"))
 
     class MockBinanceClient:
         def get_account(self):

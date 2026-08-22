@@ -1,7 +1,4 @@
-"""
-Manual asset import for FDs, gold, real estate, and US equity.
-Also Yahoo Finance price feed for Indian equities.
-"""
+"""Manual asset import for FDs, gold, real estate, and US equity."""
 from __future__ import annotations
 import logging
 import uuid
@@ -10,16 +7,12 @@ from decimal import Decimal
 from typing import Optional
 
 from core.models import AssetLot, AssetClass, Platform
+from core.aggregator.fx import get_fx_service
 
 logger = logging.getLogger(__name__)
 
 
 class ManualAssetImporter:
-    """
-    Handles manually specified assets: FDs, physical gold, real estate, US equity.
-    These don't have API connections — user provides structured JSON.
-    """
-
     def import_fd(self, data: dict, member_id: str) -> AssetLot:
         return AssetLot(
             lot_id=data.get("lot_id", f"FD-{str(uuid.uuid4())[:8]}"),
@@ -54,7 +47,11 @@ class ManualAssetImporter:
         )
 
     def import_us_equity(self, data: dict, member_id: str) -> AssetLot:
-        usd_inr = Decimal(str(data.get("usd_inr_rate", 83.5)))
+        if "usd_inr_rate" in data and data["usd_inr_rate"] is not None:
+            usd_inr = Decimal(str(data["usd_inr_rate"]))
+        else:
+            usd_inr = get_fx_service().get_usd_inr_rate()
+
         return AssetLot(
             lot_id=data.get("lot_id", f"US-{str(uuid.uuid4())[:8]}"),
             symbol=f"{data['symbol']}.US",
@@ -118,7 +115,7 @@ class ManualAssetImporter:
                 quantity=Decimal("1"),
                 acquisition_date=today - timedelta(days=200),
                 cost_basis_per_unit=Decimal("3000000"),
-                current_price=Decimal("3180000"),    # ₹30L principal + accrued interest
+                current_price=Decimal("3180000"),
                 name="HDFC Bank FD @ 7.1%",
             ),
             AssetLot(
@@ -127,21 +124,16 @@ class ManualAssetImporter:
                 asset_class=AssetClass.GOLD,
                 platform=Platform.MANUAL,
                 member_id=member_id,
-                quantity=Decimal("100"),             # 100 grams
+                quantity=Decimal("100"),
                 acquisition_date=today - timedelta(days=900),
-                cost_basis_per_unit=Decimal("4800"), # ₹4,800/g cost
-                current_price=Decimal("6200"),        # ₹6,200/g current
+                cost_basis_per_unit=Decimal("4800"),
+                current_price=Decimal("6200"),
                 name="Physical Gold (100g)",
             ),
         ]
 
 
 class YahooFinanceFeed:
-    """
-    Live price feed via yfinance for Indian equities.
-    Adds .NS suffix for NSE, .BO for BSE.
-    """
-
     def get_price(self, symbol: str) -> Optional[Decimal]:
         try:
             import yfinance as yf
@@ -155,7 +147,6 @@ class YahooFinanceFeed:
         return None
 
     def update_lot_prices(self, lots: list[AssetLot]) -> list[AssetLot]:
-        """Batch update current prices for equity lots."""
         equity_symbols = list({
             lot.symbol for lot in lots
             if lot.asset_class in (AssetClass.EQUITY, AssetClass.MUTUAL_FUND)
@@ -170,7 +161,6 @@ class YahooFinanceFeed:
         updated = []
         for lot in lots:
             if lot.symbol in prices:
-                from dataclasses import replace
                 lot = AssetLot(
                     lot_id=lot.lot_id,
                     symbol=lot.symbol,
@@ -190,7 +180,6 @@ class YahooFinanceFeed:
 
 
 def load_manual_assets_from_payload(payload: dict, member_id: str = "father") -> list[AssetLot]:
-    """Helper function to load manual assets from JSON payload."""
     importer = ManualAssetImporter()
     raw_assets = payload.get("assets", [])
     if raw_assets:

@@ -11,21 +11,24 @@ from typing import Optional
 
 from core.models import AssetLot, AssetClass, Platform
 from core.tax.crypto_tax import CryptoTransaction
+from core.aggregator.fx import get_fx_service
 
 logger = logging.getLogger(__name__)
 
-# Approximate INR conversion rates (in production, fetch live from forex API)
-DEFAULT_USD_INR = Decimal("83.50")
-
 
 class BinanceAggregator:
-
-    def __init__(self, api_key: str, api_secret: str, usd_inr_rate: Decimal = DEFAULT_USD_INR):
+    def __init__(self, api_key: str, api_secret: str, usd_inr_rate: Optional[Decimal] = None):
         self.api_key = api_key
         self.api_secret = api_secret
-        self.usd_inr_rate = usd_inr_rate
+        self._usd_inr_rate = usd_inr_rate
         self._client = None
         self._init_client()
+
+    @property
+    def usd_inr_rate(self) -> Decimal:
+        if self._usd_inr_rate is not None:
+            return self._usd_inr_rate
+        return get_fx_service().get_usd_inr_rate()
 
     def _init_client(self):
         try:
@@ -52,7 +55,6 @@ class BinanceAggregator:
                 if asset in ("USDT", "BUSD", "USDC"):
                     continue
                 qty = Decimal(b["free"]) + Decimal(b["locked"])
-                # Fetch price in USDT
                 try:
                     ticker = self._client.get_symbol_ticker(symbol=f"{asset}USDT")
                     price_usdt = Decimal(ticker["price"])
@@ -60,7 +62,6 @@ class BinanceAggregator:
                 except Exception:
                     price_inr = Decimal("0")
 
-                # Fetch cost basis and acquisition date from trade history
                 cost_basis_inr = Decimal("0")
                 acq_date = date.today()
                 try:
@@ -76,10 +77,8 @@ class BinanceAggregator:
                             cost_basis_inr = (total_buy_cost / total_buy_qty).quantize(Decimal("0.01"))
                         earliest_timestamp = min(t["time"] for t in buy_trades)
                         acq_date = date.fromtimestamp(earliest_timestamp / 1000)
-                    else:
-                        logger.warning(f"No buy trades found for Binance asset {asset}; defaulting cost basis to 0.")
                 except Exception as te:
-                    logger.warning(f"Failed to fetch trade history for Binance asset {asset}: {te}. Defaulting cost basis to 0.")
+                    logger.warning("Failed to fetch trade history for Binance asset %s: %s", asset, te)
 
                 lots.append(AssetLot(
                     lot_id=f"BNB-{asset}-{str(uuid.uuid4())[:8]}",
@@ -109,8 +108,8 @@ class BinanceAggregator:
                 member_id=member_id,
                 quantity=Decimal("0.18"),
                 acquisition_date=today - timedelta(days=420),
-                cost_basis_per_unit=Decimal("1800000"),  # ₹18L per BTC cost
-                current_price=Decimal("2161111"),         # ~$25,882 × 83.5
+                cost_basis_per_unit=Decimal("1800000"),
+                current_price=Decimal("2161111"),
                 name="Bitcoin",
             ),
             AssetLot(
@@ -121,14 +120,13 @@ class BinanceAggregator:
                 member_id=member_id,
                 quantity=Decimal("2.5"),
                 acquisition_date=today - timedelta(days=300),
-                cost_basis_per_unit=Decimal("220000"),   # ₹2.2L per ETH cost
-                current_price=Decimal("248000"),          # ~$2,970 × 83.5
+                cost_basis_per_unit=Decimal("220000"),
+                current_price=Decimal("248000"),
                 name="Ethereum",
             ),
         ]
 
     def get_transactions(self, member_id: str, symbol: str = "BTC") -> list[CryptoTransaction]:
-        """Fetch trade history for TDS computation."""
         if self._client is None:
             return self._mock_transactions(member_id)
         try:
@@ -176,14 +174,18 @@ class BinanceAggregator:
 
 
 class CoinDCXAggregator:
-
-    def __init__(self, api_key: str, api_secret: str, usd_inr_rate: Decimal = DEFAULT_USD_INR):
+    def __init__(self, api_key: str, api_secret: str, usd_inr_rate: Optional[Decimal] = None):
         self.api_key = api_key
         self.api_secret = api_secret
-        self.usd_inr_rate = usd_inr_rate
+        self._usd_inr_rate = usd_inr_rate
+
+    @property
+    def usd_inr_rate(self) -> Decimal:
+        if self._usd_inr_rate is not None:
+            return self._usd_inr_rate
+        return get_fx_service().get_usd_inr_rate()
 
     def get_holdings(self, member_id: str) -> list[AssetLot]:
-        """CoinDCX uses HMAC-based auth — mock for demo."""
         today = date.today()
         return [
             AssetLot(
@@ -194,8 +196,8 @@ class CoinDCXAggregator:
                 member_id=member_id,
                 quantity=Decimal("15"),
                 acquisition_date=today - timedelta(days=180),
-                cost_basis_per_unit=Decimal("8350"),    # ₹8,350 per SOL cost
-                current_price=Decimal("14200"),          # ~$170 × 83.5
+                cost_basis_per_unit=Decimal("8350"),
+                current_price=Decimal("14200"),
                 name="Solana",
             ),
         ]

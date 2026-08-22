@@ -12,9 +12,12 @@ from core.tax.crypto_tax import CryptoTaxEngine, CryptoTransaction
 from core.tax.fd_tax import FDTaxEngine
 from core.tax.tlh_scanner import TLHScanner
 from core.tax.lot_tracker import LotTracker
-from core.aggregator.fx import FXRateService
+from core.aggregator.fx import FXRateService, get_fx_service
+from core.aggregator.manual_import import ManualAssetImporter
+from core.aggregator.binance import BinanceAggregator
 from core.state_manager import PortfolioStateManager
 from config.settings import Settings
+from api.main import get_session_id
 
 
 def make_equity_lot(
@@ -497,6 +500,29 @@ class TestInfrastructureFeatures:
         assert fam1 is not fam2
         assert len(fam1.members) > 0
         assert len(fam2.members) > 0
+
+    def test_session_id_resolver(self):
+        assert get_session_id(x_session_id="user_123") == "user_123"
+        assert get_session_id(x_family_id="fam_456") == "fam_456"
+        assert get_session_id(session_id="query_789") == "query_789"
+        assert get_session_id() == "default"
+
+    def test_manual_us_equity_uses_live_fx(self):
+        importer = ManualAssetImporter()
+        lot = importer.import_us_equity({
+            "symbol": "AAPL",
+            "quantity": 10,
+            "acquisition_date": "2023-01-01",
+            "cost_basis_usd": 150.0,
+            "current_price_usd": 180.0,
+        }, member_id="test")
+        rate = get_fx_service().get_usd_inr_rate()
+        expected_cost = Decimal("150.0") * rate
+        assert lot.cost_basis_per_unit == expected_cost
+
+    def test_binance_uses_live_fx(self):
+        agg = BinanceAggregator(api_key="mock", api_secret="mock")
+        assert agg.usd_inr_rate == get_fx_service().get_usd_inr_rate()
 
 
 if __name__ == "__main__":
