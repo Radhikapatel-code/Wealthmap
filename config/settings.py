@@ -1,7 +1,7 @@
 """Application settings loaded from environment variables."""
 from __future__ import annotations
 from functools import lru_cache
-from typing import Optional
+from typing import Optional, List
 
 try:
     from pydantic_settings import BaseSettings
@@ -10,6 +10,16 @@ except ImportError:
 
 
 class Settings(BaseSettings):
+    app_name: str = "WealthMap"
+    debug: bool = False
+    api_key: Optional[str] = None
+    cors_allowed_origins: List[str] = [
+        "http://localhost:8501",
+        "http://127.0.0.1:8501",
+        "http://localhost:3000",
+        "http://localhost:8000",
+    ]
+
     gemini_api_key: str = ""
 
     kite_api_key: str = ""
@@ -22,8 +32,6 @@ class Settings(BaseSettings):
     coindcx_api_key: str = ""
     coindcx_api_secret: str = ""
 
-    app_name: str = "WealthMap"
-    debug: bool = False
     fy_start_month: int = 4
     default_member_id: str = "primary"
     usd_inr_rate: float = 83.5

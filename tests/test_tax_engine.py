@@ -12,6 +12,9 @@ from core.tax.crypto_tax import CryptoTaxEngine, CryptoTransaction
 from core.tax.fd_tax import FDTaxEngine
 from core.tax.tlh_scanner import TLHScanner
 from core.tax.lot_tracker import LotTracker
+from core.aggregator.fx import FXRateService
+from core.state_manager import PortfolioStateManager
+from config.settings import Settings
 
 
 def make_equity_lot(
@@ -93,6 +96,26 @@ class TestUnrealizedGain:
     def test_gain_percentage(self):
         lot = make_equity_lot(qty=100, cost=1000, current=1500)
         assert lot.unrealized_gain_pct == Decimal("50.00")
+
+
+class TestSection112AGrandfathering:
+
+    def test_grandfathering_capped_at_sale_price(self):
+        lot = AssetLot(
+            lot_id="GF-1",
+            symbol="TCS.NS",
+            asset_class=AssetClass.EQUITY,
+            platform=Platform.ZERODHA,
+            member_id="test",
+            quantity=Decimal("10"),
+            acquisition_date=date(2017, 6, 1),
+            cost_basis_per_unit=Decimal("1000"),
+            current_price=Decimal("1800"),
+            grandfathered_cost=Decimal("2000"),
+        )
+        assert lot.effective_cost_basis_at(Decimal("1800")) == Decimal("1800")
+        assert lot.effective_cost_basis_at(Decimal("2500")) == Decimal("2000")
+        assert lot.effective_cost_basis_at(Decimal("800")) == Decimal("1000")
 
 
 class TestEquityTaxEngine:
@@ -458,6 +481,22 @@ class TestDebtMFTaxCutoffDate:
         res = engine.compute_tax(lot, mf_type="DEBT", tax_slab_rate=Decimal("0.30"))
         assert res["treatment"] == "LTCG"
         assert res["tax_rate"] == 0.20
+
+
+class TestInfrastructureFeatures:
+
+    def test_fx_service_fallback(self):
+        svc = FXRateService(default_rate=83.5)
+        rate = svc.get_usd_inr_rate()
+        assert rate > Decimal("0")
+
+    def test_state_manager_thread_safety(self):
+        sm = PortfolioStateManager(settings=Settings())
+        fam1 = sm.get_family("session_1")
+        fam2 = sm.get_family("session_2")
+        assert fam1 is not fam2
+        assert len(fam1.members) > 0
+        assert len(fam2.members) > 0
 
 
 if __name__ == "__main__":

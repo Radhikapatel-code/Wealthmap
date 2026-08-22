@@ -1,21 +1,35 @@
-FROM python:3.11-slim
+FROM python:3.11-slim as builder
 
-WORKDIR /app
-
+WORKDIR /build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && rm -rf /var/lib/apt/lists/*
 
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN pip install --no-cache-dir maturin
+
+COPY wealthmap-engine ./wealthmap-engine
+RUN cd wealthmap-engine && maturin build --release -o /build/wheels
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App code
-COPY . .
+COPY --from=builder /build/wheels /wheels
+RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
 
-# Create data directory
+COPY . .
 RUN mkdir -p /app/data
 
 EXPOSE 8000 8501

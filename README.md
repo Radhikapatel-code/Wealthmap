@@ -5,21 +5,21 @@ WealthMap is a cross-asset portfolio intelligence engine built specifically for 
 
 ---
 
-## 🚀 Quick Start (Demo Mode — No API Keys Needed)
+## 🚀 Quick Start
 
 ```bash
 git clone https://github.com/Radhikapatel-code/Wealthmap.git
 cd Wealthmap
-python -m venv venv && source venv/bin/activate
+python -m venv venv && source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Load demo data and verify setup
-python scripts/load_sample_data.py
+# (Optional) Build high-performance native Rust engine extension
+make build-engine
 
 # Run dashboard
 streamlit run dashboard/app.py
 
-# Run API (separate terminal)
+# Run API backend
 uvicorn api.main:app --reload --port 8000
 ```
 
@@ -28,12 +28,10 @@ API Docs  → http://localhost:8000/docs
 
 ---
 
-## 🐳 Docker (Recommended)
+## 🐳 Docker
 
 ```bash
 cp config/.env.example .env
-# Edit .env with your API keys
-
 docker-compose up --build
 ```
 
@@ -45,12 +43,14 @@ Copy `config/.env.example` to `.env` and fill in:
 
 | Variable | Required | Description |
 |---|---|---|
-| `GEMINI_API_KEY` | ✅ For AI features | Google Gemini API key ([get free key](https://aistudio.google.com/app/apikey)) |
+| `GEMINI_API_KEY` | Optional (for AI) | Google Gemini API key ([get free key](https://aistudio.google.com/app/apikey)) |
+| `API_KEY` | Optional | Bearer / `X-API-Key` token to protect API endpoints |
+| `CORS_ALLOWED_ORIGINS` | Optional | Allowed frontend origins (default: localhost 8501, 3000, 8000) |
+| `USD_INR_RATE` | Optional | Fallback USD/INR rate (live FX fetched automatically with TTL caching) |
 | `KITE_API_KEY` + `KITE_ACCESS_TOKEN` | Optional | Zerodha equity data |
 | `BINANCE_API_KEY` + `BINANCE_API_SECRET` | Optional | Binance crypto data |
 | `COINDCX_API_KEY` | Optional | CoinDCX crypto data |
 | `TELEGRAM_BOT_TOKEN` | Optional | Daily digest alerts |
-| `USD_INR_RATE` | Optional | Static USD/INR rate (default: 83.5 — not fetched live) |
 
 Without exchange API keys, WealthMap runs with realistic mock/demo data.
 
@@ -69,14 +69,15 @@ Without exchange API keys, WealthMap runs with realistic mock/demo data.
 │  │ Binance API  │    │ Normalizer   │    │ CFO Engine   │  │
 │  │ CoinDCX API  │    │              │    │              │  │
 │  │ Yahoo Finance│    │ Tax Engine   │    │ Structured   │  │
-│  │ Manual Input │    │ (FIFO lots)  │    │ Context      │  │
-│  └──────────────┘    │              │    │ Builder      │  │
-│                      │ TLH Scanner  │    └──────────────┘  │
-│                      │ Tax Calendar │            │          │
+│  │ Live FX Feed │    │ (FIFO lots)  │    │ Context      │  │
+│  │ Manual Input │    │ TLH Scanner  │    │ Builder      │  │
+│  └──────────────┘    │ Tax Calendar │    └──────────────┘  │
+│                      │ State Manager│            │          │
 │                      └──────────────┘            ▼          │
 │                                          ┌──────────────┐  │
 │                                          │  FastAPI     │  │
 │                                          │  Backend     │  │
+│                                          │  (Auth+CORS) │  │
 │                                          └──────┬───────┘  │
 │                                                 │           │
 │                                    ┌────────────┘           │
@@ -99,8 +100,6 @@ WealthMap includes a native Rust engine [`wealthmap-engine`](./wealthmap-engine/
 - **Python / PyO3 Interop**: Zero-overhead in-process C-extension bindings (`RustEngineBridge`).
 - **SQL Parser**: Standard SQL query parsing (`sqlparser-rs`) for dynamic analytical queries over tax lot streams.
 
-For benchmark charts, architecture diagrams, and design rationales, see [`wealthmap-engine/README.md`](./wealthmap-engine/README.md).
-
 ---
 
 ## 💡 Features
@@ -113,20 +112,20 @@ For benchmark charts, architecture diagrams, and design rationales, see [`wealth
 | Mutual Funds | CSV import / manual | ✅ |
 | Fixed Deposits | Manual JSON | ✅ |
 | Physical Gold | Manual JSON | ✅ |
-| US Equity | Manual JSON | ✅ |
+| US Equity | Manual JSON (with live FX conversion) | ✅ |
 
-### 2. Indian Tax Engine
+### 2. Indian Tax Engine (FY 2025-26)
 - **FIFO lot tracking** — every purchase is a separate lot with its own acquisition date and cost basis
-- **LTCG/STCG classification** — to the day accuracy  
-- **₹1,25,000 LTCG exemption** — tracked per individual per FY (resets April 1)
-- **Grandfathering** — pre-Jan 31 2018 holdings use `max(actual_cost, Jan31_price)`
+- **LTCG/STCG classification** — to-the-day holding period accuracy  
+- **₹1,25,000 LTCG exemption** — tracked per individual per FY (resets April 1) across all equity trades
+- **Section 112A Grandfathering** — pre-Jan 31 2018 holdings use `max(actual_cost, min(Jan31_price, sale_price))`
 - **Crypto: 30% flat** — no exemption, no loss offset (Section 115BBH)
 - **FD: TDS tracking** — threshold alerts at ₹40,000
 - **LTCG Unlock Calendar** — alerts 7 days before positions cross 12-month mark
 - **Tax Loss Harvesting** — scans for offset opportunities with risk warnings
 
 ### 3. Gemini AI CFO Layer
-The AI engine (Google Gemini) receives structured, pre-computed context — never raw numbers. It reasons over:
+The AI engine (Google Gemini) receives structured, pre-computed context — never raw numbers:
 - Full family asset breakdown
 - Tax status per position (STCG/LTCG, holding days, unrealized gain)
 - YTD realized gains and tax paid
@@ -141,105 +140,22 @@ The AI never calculates tax — Python does. Gemini explains, contextualizes, an
 - Per-member tax liability with individual LTCG exemptions
 - Gift tax tracking (>₹50,000 intra-family transfers)
 
-### 5. Alerts
-- ⚡ LTCG unlock alerts (7 days before)
-- 💰 Advance tax due date reminders
-- 🚨 Crypto TDS reconciliation flags
-- 📋 Daily digest (Telegram/email)
-
----
-
-## 🧾 Tax Rules Implemented (FY 2025-26)
-
-| Asset | Holding | Rate |
-|---|---|---|
-| Equity / Equity MF | < 12 months (STCG) | 20% flat |
-| Equity / Equity MF | ≥ 12 months (LTCG) | 12.5% above ₹1,25,000 |
-| Crypto | Any | 30% flat (Section 115BBH) |
-| Crypto TDS | Per sale transaction | 1% (Section 194S) |
-| Debt MF (post Apr 2023) | Any | Slab rate |
-| FD Interest | Any | Slab rate (TDS at 10% above ₹40K) |
-| Physical Gold | ≥ 2 years | 12.5% with indexation |
-| US Equity | Any | 25% (DTAA) |
-
-**Cess:** 4% health & education cess applies on all tax.
-
----
-
-## 🛠️ Project Structure
-
-```
-wealthmap/
-├── core/
-│   ├── models.py               # AssetLot, TaxBreakdown, UnlockEvent
-│   ├── aggregator/
-│   │   ├── zerodha.py          # Kite Connect integration
-│   │   ├── binance.py          # Binance + CoinDCX
-│   │   ├── manual_import.py    # FD, gold, US equity
-│   │   └── normalizer.py       # Unified aggregation entry point
-│   ├── tax/
-│   │   ├── lot_tracker.py      # FIFO lot management + sale simulation
-│   │   ├── equity_tax.py       # LTCG/STCG engine
-│   │   ├── crypto_tax.py       # 30% + TDS engine
-│   │   ├── mf_tax.py           # Mutual fund tax
-│   │   ├── fd_tax.py           # FD interest + TDS
-│   │   ├── tlh_scanner.py      # Tax loss harvesting
-│   │   └── tax_calendar.py     # Advance tax dates, LTCG unlock
-│   ├── family/
-│   │   ├── family_unit.py      # Family aggregation, gift tracking
-│   │   └── huf.py              # HUF-specific tax logic
-│   └── ai/
-│       ├── context_builder.py  # Structured context for Gemini
-│       ├── cfo_engine.py       # Gemini API calls
-│       ├── response_parser.py  # Parse Gemini output
-│       └── prompts/            # System prompts
-├── api/
-│   ├── main.py                 # FastAPI app + all routes
-│   └── schemas/asset.py        # Pydantic request/response models
-├── dashboard/
-│   ├── app.py                  # Streamlit entry point + sidebar
-│   └── pages/
-│       ├── 01_overview.py      # Portfolio overview
-│       ├── 02_tax_center.py    # Tax + TLH + simulator
-│       ├── 03_cfo_chat.py      # AI CFO chat
-│       ├── 04_ltcg_calendar.py # LTCG unlock timeline
-│       └── 05_family.py        # Per-member breakdown
-├── tests/
-│   └── test_tax_engine.py      # 30+ unit tests
-├── data/sample/sample_portfolio.json
-├── config/settings.py
-├── scripts/load_sample_data.py
-├── requirements.txt
-├── Dockerfile
-└── docker-compose.yml
-```
+### 5. Security & State Concurrency
+- Configurable API Key Authentication (`X-API-Key` or `Authorization: Bearer <key>`)
+- Origin-restricted CORS policies
+- Thread-safe state synchronization across concurrent requests
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-# Full test suite
+# Full test suite (55+ tests)
 pytest tests/ -v
 
-# Tax engine only
-pytest tests/test_tax_engine.py -v
-
-# With coverage
-pytest tests/ --cov=core --cov-report=term-missing
-
-# Property-based tests (if hypothesis installed)
-pytest tests/ --hypothesis-show-statistics
+# Run Rust engine tests
+cargo test --release --manifest-path wealthmap-engine/Cargo.toml
 ```
-
-Key test scenarios covered:
-- LTCG/STCG classification at exact 365-day boundary
-- LTCG exemption application and partial use
-- FIFO lot consumption and partial lot splits
-- Crypto 30% flat tax and loss handling
-- FD TDS threshold triggers
-- TLH STCG vs LTCG offset rules
-- FY boundary (April 1 reset)
 
 ---
 
@@ -272,26 +188,8 @@ POST /ai/chat                       Multi-turn CFO chat
 GET  /ai/daily-digest               Daily digest
 ```
 
-### Alerts
-```
-GET  /alerts                        All active alerts
-```
-
 ---
 
 ## ⚠️ Disclaimer
 
-WealthMap is a personal project for educational and informational purposes. It is **not** a SEBI-registered investment advisor or tax consultant. Tax laws change — always verify computations with a qualified CA before making financial decisions. The developer assumes no liability for financial decisions made based on this tool's output.
-
----
-
-## 🗺️ Roadmap
-
-- [ ] US equity integration via Vested API
-- [ ] Automated ITR-2 Schedule AL pre-fill
-- [ ] WhatsApp digest
-- [ ] Multi-CA collaboration (read-only CA access)
-- [ ] Advance tax UPI deep-link to NSDL
-- [ ] Grandfathering data import from CDSL CAS
-- [ ] Debt MF NAV from AMFI daily file
-- [ ] Backtesting: "TLH savings last FY"
+WealthMap is a personal project for educational and informational purposes. It is **not** a SEBI-registered investment advisor or tax consultant. Tax laws change — always verify computations with a qualified CA before making financial decisions.

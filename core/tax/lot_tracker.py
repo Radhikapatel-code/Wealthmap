@@ -18,7 +18,8 @@ class SaleSlice:
 
     @property
     def cost_basis_inr(self) -> Decimal:
-        return (self.quantity * self.lot.effective_cost_basis).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        basis = self.lot.effective_cost_basis_at(self.sale_price)
+        return (self.quantity * basis).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     @property
     def proceeds_inr(self) -> Decimal:
@@ -31,11 +32,6 @@ class SaleSlice:
 
 
 class LotTracker:
-    """
-    Maintains ordered (FIFO) lots per symbol per member.
-    On sale, consumes oldest lots first and emits RealizedTransaction records.
-    """
-
     def __init__(self):
         self._lots: dict[tuple[str, str], list[AssetLot]] = defaultdict(list)
         self._realized: list[RealizedTransaction] = []
@@ -78,7 +74,6 @@ class LotTracker:
         member_id: str | None = None,
         symbol: str | None = None,
     ) -> list[SaleSlice]:
-        """Build FIFO sale slices for a given quantity. Does not mutate state."""
         qty = Decimal(str(quantity))
         if lots is None:
             if member_id is None or symbol is None:
@@ -117,10 +112,6 @@ class LotTracker:
         sale_date: Optional[date] = None,
         ytd_realized_ltcg: Decimal = Decimal("0"),
     ) -> dict:
-        """
-        Simulate selling units at a given price.
-        Returns detailed lot-by-lot tax breakdown without mutating state.
-        """
         if sale_date is None:
             sale_date = date.today()
 
@@ -149,7 +140,8 @@ class LotTracker:
 
             sell_qty = min(remaining_qty, lot.quantity)
             holding_days_at_sale = (sale_date - lot.acquisition_date).days
-            gain = (sale_price - lot.effective_cost_basis) * sell_qty
+            effective_cost = lot.effective_cost_basis_at(sale_price)
+            gain = (sale_price - effective_cost) * sell_qty
             gain = gain.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
             is_lt = self._is_long_term_at_date(lot, sale_date)
@@ -188,7 +180,7 @@ class LotTracker:
                 "symbol": symbol,
                 "quantity": float(sell_qty),
                 "acquisition_date": lot.acquisition_date.isoformat(),
-                "cost_basis_per_unit": float(lot.effective_cost_basis),
+                "cost_basis_per_unit": float(effective_cost),
                 "sale_price_per_unit": float(sale_price),
                 "holding_days": holding_days_at_sale,
                 "classification": classification.value,
@@ -242,11 +234,6 @@ class LotTracker:
         sale_date: Optional[date] = None,
         ytd_realized_ltcg: Decimal = Decimal("0"),
     ) -> list[RealizedTransaction]:
-        """
-        Consume lots (FIFO) and record realized transactions. Mutates internal state.
-        The ytd_realized_ltcg parameter ensures correct application of the per-individual
-        annual LTCG exemption (₹1,25,000).
-        """
         if sale_date is None:
             sale_date = date.today()
 
@@ -270,7 +257,8 @@ class LotTracker:
             remaining -= sell_qty
 
             is_lt = self._is_long_term_at_date(lot, sale_date)
-            gain = (sale_price - lot.effective_cost_basis) * sell_qty
+            effective_cost = lot.effective_cost_basis_at(sale_price)
+            gain = (sale_price - effective_cost) * sell_qty
 
             if lot.asset_class == AssetClass.CRYPTO:
                 classification = TaxClassification.CRYPTO
@@ -320,7 +308,7 @@ class LotTracker:
                 quantity=sell_qty,
                 sale_date=sale_date,
                 sale_price_per_unit=sale_price,
-                cost_basis_per_unit=lot.effective_cost_basis,
+                cost_basis_per_unit=effective_cost,
                 acquisition_date=lot.acquisition_date,
                 tax_breakdown=tax_bd,
             ))
@@ -361,7 +349,6 @@ class LotTracker:
         return days_held >= threshold
 
     def _build_advisory(self, lots: list[AssetLot], quantity: Decimal, sale_date: date, ytd_ltcg: Decimal) -> dict:
-        """Check if waiting for LTCG classification saves significant tax."""
         stcg_lots = [
             l for l in lots
             if not self._is_long_term_at_date(l, sale_date)

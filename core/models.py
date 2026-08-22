@@ -133,16 +133,26 @@ class AssetLot:
     def holding_days(self) -> int:
         return (date.today() - self.acquisition_date).days
 
-    @property
-    def effective_cost_basis(self) -> Decimal:
-        """Applies grandfathering for pre-Jan 31 2018 equity holdings."""
+    def effective_cost_basis_at(self, sale_or_current_price: Optional[Decimal] = None) -> Decimal:
+        """
+        Computes effective cost basis according to Section 112A grandfathering rules:
+        Cost of Acquisition = max(Actual Cost, min(FMV on 31-Jan-2018, Sale/Current Price)).
+        """
         if (
             self.grandfathered_cost is not None
             and self.acquisition_date <= TaxConstants.GRANDFATHERING_CUTOFF
             and self.asset_class in (AssetClass.EQUITY, AssetClass.MUTUAL_FUND)
         ):
+            target_price = sale_or_current_price if sale_or_current_price is not None else self.current_price
+            if target_price > Decimal("0"):
+                capped_fmv = min(self.grandfathered_cost, target_price)
+                return max(self.cost_basis_per_unit, capped_fmv)
             return max(self.cost_basis_per_unit, self.grandfathered_cost)
         return self.cost_basis_per_unit
+
+    @property
+    def effective_cost_basis(self) -> Decimal:
+        return self.effective_cost_basis_at(self.current_price)
 
     @property
     def is_long_term(self) -> bool:
@@ -197,6 +207,7 @@ class AssetLot:
             "quantity": float(self.quantity),
             "acquisition_date": self.acquisition_date.isoformat(),
             "cost_basis_per_unit_inr": float(self.cost_basis_per_unit),
+            "effective_cost_basis_inr": float(self.effective_cost_basis),
             "current_price_inr": float(self.current_price),
             "current_value_inr": float(self.current_value),
             "total_cost_basis_inr": float(self.total_cost_basis),
