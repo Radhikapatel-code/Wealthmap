@@ -1,4 +1,8 @@
 # WealthMap 🗺️
+![CI](https://github.com/Radhikapatel-code/Wealthmap/actions/workflows/ci.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![Rust](https://img.shields.io/badge/rust-stable-orange)
+![License](https://img.shields.io/github/license/Radhikapatel-code/Wealthmap)
 ### AI-Powered Portfolio Intelligence for High-Net-Worth Indian Families
 
 WealthMap is a cross-asset portfolio intelligence engine built specifically for Indian HNI families — aggregating equity, crypto, and mutual fund data, computing real Indian tax liability at the lot level, and surfacing Gemini-powered CFO-grade reasoning across the entire family's wealth picture.
