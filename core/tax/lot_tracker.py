@@ -263,10 +263,16 @@ class LotTracker:
         quantity: Decimal,
         sale_price: Decimal,
         sale_date: Optional[date] = None,
+        ytd_realized_ltcg: Decimal = Decimal("0"),
     ) -> list[RealizedTransaction]:
         """
         Actually consume lots (FIFO) and record realized transactions.
         Mutates internal state.
+
+        Args:
+            ytd_realized_ltcg: Year-to-date realized LTCG for this member,
+                used to correctly apply the ₹1,25,000 per-individual LTCG
+                exemption. Gains within the remaining exemption are not taxed.
         """
         if sale_date is None:
             sale_date = date.today()
@@ -280,6 +286,10 @@ class LotTracker:
         remaining = quantity
         realized = []
         updated_lots = []
+
+        # Track LTCG exemption usage across lots within this sale,
+        # starting from whatever has already been consumed YTD.
+        ltcg_exemption_used = ytd_realized_ltcg
 
         for lot in lots:
             if remaining <= 0:
@@ -295,14 +305,29 @@ class LotTracker:
             if lot.asset_class == AssetClass.CRYPTO:
                 classification = TaxClassification.CRYPTO
                 rate = TaxConstants.CRYPTO_RATE
+                taxable = max(gain, Decimal("0"))
+                notes = ""
             elif is_lt:
                 classification = TaxClassification.LTCG
                 rate = TaxConstants.LTCG_RATE
+                # Apply remaining LTCG exemption (₹1,25,000 per individual per FY)
+                remaining_exemption = max(
+                    TaxConstants.LTCG_EXEMPTION - ltcg_exemption_used, Decimal("0")
+                )
+                gain_above_exemption = max(gain - remaining_exemption, Decimal("0"))
+                exemption_applied = min(max(gain, Decimal("0")), remaining_exemption)
+                ltcg_exemption_used += exemption_applied
+                taxable = gain_above_exemption
+                notes = (
+                    f"LTCG exemption applied: ₹{float(exemption_applied):,.0f}"
+                    if exemption_applied > 0 else ""
+                )
             else:
                 classification = TaxClassification.STCG
                 rate = TaxConstants.STCG_RATE
+                taxable = max(gain, Decimal("0"))
+                notes = ""
 
-            taxable = max(gain, Decimal("0"))
             tax_amount = (taxable * rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             cess = (tax_amount * TaxConstants.HEALTH_EDUCATION_CESS).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -314,6 +339,7 @@ class LotTracker:
                 tax_amount=tax_amount,
                 cess_amount=cess,
                 total_tax=tax_amount + cess,
+                notes=notes,
             )
 
             realized.append(RealizedTransaction(

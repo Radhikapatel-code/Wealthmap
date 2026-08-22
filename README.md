@@ -1,7 +1,7 @@
 # WealthMap 🗺️
 ### AI-Powered Portfolio Intelligence for High-Net-Worth Indian Families
 
-WealthMap is a cross-asset portfolio intelligence engine built specifically for Indian HNI families — aggregating equity, crypto, and mutual fund data, computing real Indian tax liability at the lot level, and surfacing Claude-powered CFO-grade reasoning across the entire family's wealth picture.
+WealthMap is a cross-asset portfolio intelligence engine built specifically for Indian HNI families — aggregating equity, crypto, and mutual fund data, computing real Indian tax liability at the lot level, and surfacing Gemini-powered CFO-grade reasoning across the entire family's wealth picture.
 
 ---
 
@@ -45,11 +45,12 @@ Copy `config/.env.example` to `.env` and fill in:
 
 | Variable | Required | Description |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | ✅ For AI features | Claude API key |
+| `GEMINI_API_KEY` | ✅ For AI features | Google Gemini API key ([get free key](https://aistudio.google.com/app/apikey)) |
 | `KITE_API_KEY` + `KITE_ACCESS_TOKEN` | Optional | Zerodha equity data |
 | `BINANCE_API_KEY` + `BINANCE_API_SECRET` | Optional | Binance crypto data |
 | `COINDCX_API_KEY` | Optional | CoinDCX crypto data |
 | `TELEGRAM_BOT_TOKEN` | Optional | Daily digest alerts |
+| `USD_INR_RATE` | Optional | Static USD/INR rate (default: 83.5 — not fetched live) |
 
 Without exchange API keys, WealthMap runs with realistic mock/demo data.
 
@@ -64,7 +65,7 @@ Without exchange API keys, WealthMap runs with realistic mock/demo data.
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
 │  │  Data Layer  │    │  Compute     │    │  AI Layer    │  │
 │  │              │    │  Layer       │    │              │  │
-│  │ Zerodha API  │───▶│ Portfolio    │───▶│ Claude       │  │
+│  │ Zerodha API  │───▶│ Portfolio    │───▶│ Gemini       │  │
 │  │ Binance API  │    │ Normalizer   │    │ CFO Engine   │  │
 │  │ CoinDCX API  │    │              │    │              │  │
 │  │ Yahoo Finance│    │ Tax Engine   │    │ Structured   │  │
@@ -124,15 +125,15 @@ For benchmark charts, architecture diagrams, and design rationales, see [`wealth
 - **LTCG Unlock Calendar** — alerts 7 days before positions cross 12-month mark
 - **Tax Loss Harvesting** — scans for offset opportunities with risk warnings
 
-### 3. Claude CFO Layer
-Claude receives structured, pre-computed context — never raw numbers. It reasons over:
+### 3. Gemini AI CFO Layer
+The AI engine (Google Gemini) receives structured, pre-computed context — never raw numbers. It reasons over:
 - Full family asset breakdown
 - Tax status per position (STCG/LTCG, holding days, unrealized gain)
 - YTD realized gains and tax paid
 - LTCG unlock events
 - TLH opportunities
 
-Claude never calculates tax — Python does. Claude explains, contextualizes, and recommends.
+The AI never calculates tax — Python does. Gemini explains, contextualizes, and recommends.
 
 ### 4. Family Office View
 - Multiple member profiles (Father, Mother, Adult Child, HUF)
@@ -188,9 +189,9 @@ wealthmap/
 │   │   ├── family_unit.py      # Family aggregation, gift tracking
 │   │   └── huf.py              # HUF-specific tax logic
 │   └── ai/
-│       ├── context_builder.py  # Structured context for Claude
-│       ├── cfo_engine.py       # Claude API calls
-│       ├── response_parser.py  # Parse Claude output
+│       ├── context_builder.py  # Structured context for Gemini
+│       ├── cfo_engine.py       # Gemini API calls
+│       ├── response_parser.py  # Parse Gemini output
 │       └── prompts/            # System prompts
 ├── api/
 │   ├── main.py                 # FastAPI app + all routes
@@ -200,7 +201,7 @@ wealthmap/
 │   └── pages/
 │       ├── 01_overview.py      # Portfolio overview
 │       ├── 02_tax_center.py    # Tax + TLH + simulator
-│       ├── 03_cfo_chat.py      # Claude CFO chat
+│       ├── 03_cfo_chat.py      # AI CFO chat
 │       ├── 04_ltcg_calendar.py # LTCG unlock timeline
 │       └── 05_family.py        # Per-member breakdown
 ├── tests/
@@ -262,7 +263,7 @@ GET  /tax/advance-tax               Advance tax schedule
 GET  /tax/key-dates                 All FY tax dates
 ```
 
-### AI (Claude)
+### AI (Gemini)
 ```
 POST /ai/portfolio-health           Full portfolio assessment
 POST /ai/tax-advice                 Tax optimization advice

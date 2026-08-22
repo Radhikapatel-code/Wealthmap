@@ -51,16 +51,22 @@ def build_golden_dataset():
 
     # Process FIFO matching per account and symbol
     matched_lots = []
-    
+
     # Group transactions by (member_id, symbol)
     groups = {}
     for tx in raw_transactions:
         key = (tx["member_id"], tx["symbol"])
         groups.setdefault(key, []).append(tx)
 
+    # Collect all (member_id, symbol) groups and sort them so that sells are
+    # processed in chronological order per member.  This lets us accumulate
+    # ytd_realized_ltcg correctly across symbols for the same individual
+    # (the ₹1,25,000 LTCG exemption is per-individual, not per-symbol).
+    ordered_sells: list[tuple[str, str, dict]] = []
+    trackers: dict[tuple[str, str], LotTracker] = {}
+
     for (member_id, symbol), tx_list in groups.items():
         tracker = LotTracker()
-        # Sort chronologically by date
         sorted_txs = sorted(tx_list, key=lambda x: x["date"])
         for tx in sorted_txs:
             if tx["side"] == "BUY":
@@ -77,35 +83,56 @@ def build_golden_dataset():
                 )
                 tracker.add_lot(lot)
             elif tx["side"] == "SELL":
-                sell_date = date.fromisoformat(tx["date"])
-                sell_price = Decimal(tx["price"])
-                sell_qty = Decimal(tx["quantity"])
-                realized_txs = tracker.execute_sale(
-                    member_id=member_id,
-                    symbol=symbol,
-                    quantity=sell_qty,
-                    sale_price=sell_price,
-                    sale_date=sell_date,
-                )
-                for rtx in realized_txs:
-                    matched_lots.append({
-                        "member_id": rtx.member_id,
-                        "symbol": rtx.symbol,
-                        "lot_id": rtx.lot_id,
-                        "buy_date": rtx.acquisition_date.isoformat(),
-                        "sell_date": rtx.sale_date.isoformat(),
-                        "quantity": float(rtx.quantity),
-                        "buy_price": float(rtx.cost_basis_per_unit),
-                        "sell_price": float(rtx.sale_price_per_unit),
-                        "gross_gain_inr": float(rtx.tax_breakdown.gross_gain),
-                        "taxable_gain_inr": float(rtx.tax_breakdown.taxable_gain),
-                        "tax_rate": float(rtx.tax_breakdown.tax_rate),
-                        "tax_amount_inr": float(rtx.tax_breakdown.tax_amount),
-                        "cess_amount_inr": float(rtx.tax_breakdown.cess_amount),
-                        "total_tax_inr": float(rtx.tax_breakdown.total_tax),
-                        "classification": rtx.tax_breakdown.classification.value,
-                        "holding_days": (rtx.sale_date - rtx.acquisition_date).days,
-                    })
+                ordered_sells.append((member_id, symbol, tx))
+        trackers[(member_id, symbol)] = tracker
+
+    # Sort all sells chronologically so exemption is consumed in date order
+    ordered_sells.sort(key=lambda x: x[2]["date"])
+
+    # Track per-member YTD realized LTCG for exemption accounting
+    member_ytd_ltcg: dict[str, Decimal] = {}
+
+    for member_id, symbol, tx in ordered_sells:
+        tracker = trackers[(member_id, symbol)]
+        sell_date = date.fromisoformat(tx["date"])
+        sell_price = Decimal(tx["price"])
+        sell_qty = Decimal(tx["quantity"])
+
+        ytd_ltcg = member_ytd_ltcg.get(member_id, Decimal("0"))
+        realized_txs = tracker.execute_sale(
+            member_id=member_id,
+            symbol=symbol,
+            quantity=sell_qty,
+            sale_price=sell_price,
+            sale_date=sell_date,
+            ytd_realized_ltcg=ytd_ltcg,
+        )
+
+        # Accumulate LTCG gains for this member's exemption tracking
+        for rtx in realized_txs:
+            if rtx.tax_breakdown.classification == TaxClassification.LTCG:
+                gain = rtx.tax_breakdown.gross_gain
+                if gain > Decimal("0"):
+                    member_ytd_ltcg[member_id] = member_ytd_ltcg.get(member_id, Decimal("0")) + gain
+
+            matched_lots.append({
+                "member_id": rtx.member_id,
+                "symbol": rtx.symbol,
+                "lot_id": rtx.lot_id,
+                "buy_date": rtx.acquisition_date.isoformat(),
+                "sell_date": rtx.sale_date.isoformat(),
+                "quantity": float(rtx.quantity),
+                "buy_price": float(rtx.cost_basis_per_unit),
+                "sell_price": float(rtx.sale_price_per_unit),
+                "gross_gain_inr": float(rtx.tax_breakdown.gross_gain),
+                "taxable_gain_inr": float(rtx.tax_breakdown.taxable_gain),
+                "tax_rate": float(rtx.tax_breakdown.tax_rate),
+                "tax_amount_inr": float(rtx.tax_breakdown.tax_amount),
+                "cess_amount_inr": float(rtx.tax_breakdown.cess_amount),
+                "total_tax_inr": float(rtx.tax_breakdown.total_tax),
+                "classification": rtx.tax_breakdown.classification.value,
+                "holding_days": (rtx.sale_date - rtx.acquisition_date).days,
+            })
 
     # Group aggregates per (member_id, symbol, classification)
     aggregates = {}

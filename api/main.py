@@ -37,6 +37,10 @@ logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────
 # App State (in-memory for demo; swap for DB in prod)
+# TODO: These module-level singletons are shared across all requests with no
+#       per-session or per-user isolation, and are not thread-safe under
+#       concurrent async requests. Replace with a proper DB/session layer
+#       before multi-user deployment.
 # ─────────────────────────────────────────────
 
 _family: Optional[FamilyUnit] = None
@@ -121,6 +125,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# TODO: SECURITY — No authentication on any route. This app holds brokerage/exchange
+#       API credentials and portfolio data. Add auth (e.g. OAuth2, API keys) before
+#       exposing beyond localhost.
+# TODO: CORS is fully open (allow_origins=["*"]). Restrict to known frontend origins
+#       in any non-demo deployment.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -353,7 +362,7 @@ def get_gift_alerts():
 
 @app.post("/ai/portfolio-health", response_model=AIResponse, tags=["AI"])
 def ai_portfolio_health():
-    """Claude portfolio health assessment."""
+    """Gemini portfolio health assessment."""
     family = _get_family()
     cfo = _get_cfo()
     context = _context_builder.build_portfolio_context(family)
@@ -363,7 +372,7 @@ def ai_portfolio_health():
 
 @app.post("/ai/tax-advice", response_model=AIResponse, tags=["AI"])
 def ai_tax_advice(request: Optional[ScenarioRequest] = None):
-    """Claude tax optimization advice."""
+    """Gemini tax optimization advice."""
     family = _get_family()
     cfo = _get_cfo()
     query = request.query if request else None
@@ -374,7 +383,7 @@ def ai_tax_advice(request: Optional[ScenarioRequest] = None):
 
 @app.post("/ai/scenario", response_model=AIResponse, tags=["AI"])
 def ai_scenario(request: ScenarioRequest):
-    """Claude scenario analysis — free-form query."""
+    """Gemini scenario analysis — free-form query."""
     family = _get_family()
     cfo = _get_cfo()
     context = _context_builder.build_scenario_context(

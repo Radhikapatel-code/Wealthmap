@@ -289,6 +289,94 @@ class TestLotTrackerFIFO:
         remaining_qty = sum(l.quantity for l in remaining)
         assert remaining_qty == Decimal("60")
 
+    def test_execute_sale_ltcg_exemption_applied(self):
+        """₹35,000 LTCG gain with zero YTD LTCG should be fully exempt (₹0 tax)."""
+        tracker = LotTracker()
+        lot = make_equity_lot("RELIANCE.NS", days_held=400, qty=100, cost=1000, current=1350)
+        tracker.add_lot(lot)
+
+        realized = tracker.execute_sale(
+            "test", "RELIANCE.NS", Decimal("100"), Decimal("1350"),
+            ytd_realized_ltcg=Decimal("0"),
+        )
+        assert len(realized) == 1
+        tb = realized[0].tax_breakdown
+        assert tb.classification.value == "LTCG"
+        assert tb.gross_gain == Decimal("35000.00")
+        assert tb.taxable_gain == Decimal("0")
+        assert tb.tax_amount == Decimal("0")
+        assert tb.total_tax == Decimal("0")
+
+    def test_execute_sale_ltcg_exemption_partially_used(self):
+        """YTD LTCG ₹1,00,000 already used → ₹25,000 exemption remains.
+        Gain of ₹2,00,000 → taxable = ₹1,75,000."""
+        tracker = LotTracker()
+        lot = make_equity_lot("WIPRO.NS", days_held=400, qty=100, cost=1000, current=3000)
+        tracker.add_lot(lot)
+
+        realized = tracker.execute_sale(
+            "test", "WIPRO.NS", Decimal("100"), Decimal("3000"),
+            ytd_realized_ltcg=Decimal("100000"),
+        )
+        assert len(realized) == 1
+        tb = realized[0].tax_breakdown
+        assert tb.classification.value == "LTCG"
+        assert tb.gross_gain == Decimal("200000.00")
+        assert tb.taxable_gain == Decimal("175000")
+        expected_tax = Decimal("175000") * Decimal("0.125")
+        assert tb.tax_amount == expected_tax.quantize(Decimal("0.01"))
+
+    def test_execute_sale_ltcg_exemption_exhausted(self):
+        """YTD LTCG ₹1,50,000 (above ₹1,25,000 limit) → zero exemption remains.
+        Full gain is taxable."""
+        tracker = LotTracker()
+        lot = make_equity_lot("INFY.NS", days_held=400, qty=100, cost=1000, current=2000)
+        tracker.add_lot(lot)
+
+        realized = tracker.execute_sale(
+            "test", "INFY.NS", Decimal("100"), Decimal("2000"),
+            ytd_realized_ltcg=Decimal("150000"),
+        )
+        assert len(realized) == 1
+        tb = realized[0].tax_breakdown
+        assert tb.taxable_gain == Decimal("100000")
+        expected_tax = Decimal("100000") * Decimal("0.125")
+        assert tb.tax_amount == expected_tax.quantize(Decimal("0.01"))
+
+    def test_execute_sale_stcg_unchanged(self):
+        """STCG path should be unaffected — no exemption, 20% flat."""
+        tracker = LotTracker()
+        lot = make_equity_lot("TCS.NS", days_held=100, qty=100, cost=1000, current=1500)
+        tracker.add_lot(lot)
+
+        realized = tracker.execute_sale(
+            "test", "TCS.NS", Decimal("100"), Decimal("1500"),
+            ytd_realized_ltcg=Decimal("0"),
+        )
+        assert len(realized) == 1
+        tb = realized[0].tax_breakdown
+        assert tb.classification.value == "STCG"
+        assert tb.taxable_gain == Decimal("50000")
+        expected_tax = Decimal("50000") * Decimal("0.20")
+        assert tb.tax_amount == expected_tax.quantize(Decimal("0.01"))
+
+    def test_execute_sale_crypto_unchanged(self):
+        """Crypto path should be unaffected — 30% flat, no exemption."""
+        tracker = LotTracker()
+        lot = make_crypto_lot("BTC", qty="1", cost=2000000, current=3000000)
+        tracker.add_lot(lot)
+
+        realized = tracker.execute_sale(
+            "test", "BTC", Decimal("1"), Decimal("3000000"),
+            ytd_realized_ltcg=Decimal("0"),
+        )
+        assert len(realized) == 1
+        tb = realized[0].tax_breakdown
+        assert tb.classification.value == "CRYPTO"
+        assert tb.taxable_gain == Decimal("1000000")
+        expected_tax = Decimal("1000000") * Decimal("0.30")
+        assert tb.tax_amount == expected_tax.quantize(Decimal("0.01"))
+
 
 # ── TLH Scanner Tests ─────────────────────────────────────────────────────────
 
