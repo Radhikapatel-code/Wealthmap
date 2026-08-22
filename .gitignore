@@ -1,11 +1,22 @@
 __pycache__/
 *.pyc
+*.pyo
 .pytest_cache/
+.hypothesis/
+.early.coverage/
 .env
-venv/
 
 *.pyd
 *.so
 *.dll
 
-.early.coverage
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+data/*.db
+*.sqlite3
+
+target/

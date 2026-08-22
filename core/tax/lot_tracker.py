@@ -1,16 +1,12 @@
-"""
-Lot Tracker — FIFO lot management for Indian tax computation.
-Tracks purchase lots and correctly consumes them on sale.
-"""
+"""FIFO lot management and Indian tax computation for WealthMap."""
 from __future__ import annotations
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 import uuid
 
 from dataclasses import dataclass
-
 from core.models import AssetLot, AssetClass, Platform, RealizedTransaction, TaxBreakdown, TaxClassification, TaxConstants
 
 
@@ -41,23 +37,17 @@ class LotTracker:
     """
 
     def __init__(self):
-        # key: (member_id, symbol) → sorted list of AssetLot (oldest first)
         self._lots: dict[tuple[str, str], list[AssetLot]] = defaultdict(list)
         self._realized: list[RealizedTransaction] = []
-
-    # ── Ingestion ────────────────────────────────────────────────────────────
 
     def add_lot(self, lot: AssetLot) -> None:
         key = (lot.member_id, lot.symbol)
         self._lots[key].append(lot)
-        # Keep sorted by acquisition date (oldest first = FIFO)
         self._lots[key].sort(key=lambda x: x.acquisition_date)
 
     def add_lots(self, lots: list[AssetLot]) -> None:
         for lot in lots:
             self.add_lot(lot)
-
-    # ── Query ────────────────────────────────────────────────────────────────
 
     def get_lots(self, member_id: str, symbol: str) -> list[AssetLot]:
         return list(self._lots.get((member_id, symbol), []))
@@ -80,8 +70,6 @@ class LotTracker:
             return list(self._realized)
         return [r for r in self._realized if r.member_id == member_id]
 
-    # ── Sale Simulation ──────────────────────────────────────────────────────
-
     def build_sale_slices(
         self,
         lots: list[AssetLot] | None = None,
@@ -90,11 +78,7 @@ class LotTracker:
         member_id: str | None = None,
         symbol: str | None = None,
     ) -> list[SaleSlice]:
-        """
-        Construct FIFO sale slices for a given quantity across lots.
-        If `lots` is not passed directly, retrieves lots for `member_id` and `symbol`.
-        Does not mutate state.
-        """
+        """Build FIFO sale slices for a given quantity. Does not mutate state."""
         qty = Decimal(str(quantity))
         if lots is None:
             if member_id is None or symbol is None:
@@ -134,8 +118,8 @@ class LotTracker:
         ytd_realized_ltcg: Decimal = Decimal("0"),
     ) -> dict:
         """
-        Simulate selling `quantity` units at `sale_price`.
-        Returns detailed lot-by-lot breakdown without mutating state.
+        Simulate selling units at a given price.
+        Returns detailed lot-by-lot tax breakdown without mutating state.
         """
         if sale_date is None:
             sale_date = date.today()
@@ -157,7 +141,6 @@ class LotTracker:
         stcg_this_tx = Decimal("0")
         crypto_gain = Decimal("0")
         total_tax = Decimal("0")
-
         ltcg_exemption_used = ytd_realized_ltcg
 
         for lot in available:
@@ -169,7 +152,6 @@ class LotTracker:
             gain = (sale_price - lot.effective_cost_basis) * sell_qty
             gain = gain.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-            # Determine classification
             is_lt = self._is_long_term_at_date(lot, sale_date)
 
             if lot.asset_class == AssetClass.CRYPTO:
@@ -181,7 +163,6 @@ class LotTracker:
             elif is_lt:
                 classification = TaxClassification.LTCG
                 tax_rate = TaxConstants.LTCG_RATE
-                # Apply remaining exemption
                 remaining_exemption = max(
                     TaxConstants.LTCG_EXEMPTION - ltcg_exemption_used, Decimal("0")
                 )
@@ -223,11 +204,7 @@ class LotTracker:
 
         proceeds = (quantity * sale_price).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         net_proceeds = proceeds - total_tax
-
-        # Advisory: should user wait for LTCG?
-        advisory = self._build_advisory(
-            available, quantity, sale_date, ytd_realized_ltcg
-        )
+        advisory = self._build_advisory(available, quantity, sale_date, ytd_realized_ltcg)
 
         return {
             "sale_summary": {
@@ -266,13 +243,9 @@ class LotTracker:
         ytd_realized_ltcg: Decimal = Decimal("0"),
     ) -> list[RealizedTransaction]:
         """
-        Actually consume lots (FIFO) and record realized transactions.
-        Mutates internal state.
-
-        Args:
-            ytd_realized_ltcg: Year-to-date realized LTCG for this member,
-                used to correctly apply the ₹1,25,000 per-individual LTCG
-                exemption. Gains within the remaining exemption are not taxed.
+        Consume lots (FIFO) and record realized transactions. Mutates internal state.
+        The ytd_realized_ltcg parameter ensures correct application of the per-individual
+        annual LTCG exemption (₹1,25,000).
         """
         if sale_date is None:
             sale_date = date.today()
@@ -286,9 +259,6 @@ class LotTracker:
         remaining = quantity
         realized = []
         updated_lots = []
-
-        # Track LTCG exemption usage across lots within this sale,
-        # starting from whatever has already been consumed YTD.
         ltcg_exemption_used = ytd_realized_ltcg
 
         for lot in lots:
@@ -310,7 +280,6 @@ class LotTracker:
             elif is_lt:
                 classification = TaxClassification.LTCG
                 rate = TaxConstants.LTCG_RATE
-                # Apply remaining LTCG exemption (₹1,25,000 per individual per FY)
                 remaining_exemption = max(
                     TaxConstants.LTCG_EXEMPTION - ltcg_exemption_used, Decimal("0")
                 )
@@ -356,7 +325,6 @@ class LotTracker:
                 tax_breakdown=tax_bd,
             ))
 
-            # If partial lot remains, keep the remainder
             if lot.quantity > sell_qty:
                 remaining_lot = AssetLot(
                     lot_id=lot.lot_id + "_R",
@@ -378,8 +346,6 @@ class LotTracker:
         self._realized.extend(realized)
         return realized
 
-    # ── Helpers ──────────────────────────────────────────────────────────────
-
     @staticmethod
     def _is_long_term_at_date(lot: AssetLot, check_date: date) -> bool:
         days_held = (check_date - lot.acquisition_date).days
@@ -394,13 +360,7 @@ class LotTracker:
             return False
         return days_held >= threshold
 
-    def _build_advisory(
-        self,
-        lots: list[AssetLot],
-        quantity: Decimal,
-        sale_date: date,
-        ytd_ltcg: Decimal,
-    ) -> dict:
+    def _build_advisory(self, lots: list[AssetLot], quantity: Decimal, sale_date: date, ytd_ltcg: Decimal) -> dict:
         """Check if waiting for LTCG classification saves significant tax."""
         stcg_lots = [
             l for l in lots
@@ -425,8 +385,6 @@ class LotTracker:
         saving = (stcg_tax - ltcg_tax).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         if saving > Decimal("1000"):
-            unlock_date = earliest.acquisition_date
-            from datetime import timedelta
             unlock_date = earliest.acquisition_date + timedelta(days=TaxConstants.EQUITY_LONG_TERM_DAYS)
             return {
                 "wait_recommendation": True,
@@ -443,5 +401,4 @@ class LotTracker:
         }
 
 
-# Backwards compatibility alias
 FIFOLotTracker = LotTracker

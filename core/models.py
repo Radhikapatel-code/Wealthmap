@@ -1,6 +1,6 @@
 """
 Core data models for WealthMap.
-All monetary values use Decimal for financial precision — no floats.
+All monetary values use Decimal for financial precision.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
@@ -9,10 +9,6 @@ from decimal import Decimal, ROUND_HALF_UP
 from enum import Enum
 from typing import Optional
 
-
-# ─────────────────────────────────────────────
-# Enums
-# ─────────────────────────────────────────────
 
 class AssetClass(str, Enum):
     EQUITY = "EQUITY"
@@ -25,11 +21,11 @@ class AssetClass(str, Enum):
 
 
 class TaxClassification(str, Enum):
-    STCG = "STCG"          # Short-Term Capital Gain
-    LTCG = "LTCG"          # Long-Term Capital Gain
-    CRYPTO = "CRYPTO"      # 30% flat, no offset
-    INTEREST = "INTEREST"  # Slab rate (FD)
-    EXEMPT = "EXEMPT"      # Within exemption limit
+    STCG = "STCG"
+    LTCG = "LTCG"
+    CRYPTO = "CRYPTO"
+    INTEREST = "INTEREST"
+    EXEMPT = "EXEMPT"
 
 
 class Platform(str, Enum):
@@ -43,45 +39,34 @@ class Platform(str, Enum):
     MANUAL = "manual"
 
 
-# ─────────────────────────────────────────────
-# Indian Tax Constants FY 2025-26
-# ─────────────────────────────────────────────
-
 class TaxConstants:
-    # Equity / MF
-    STCG_RATE = Decimal("0.20")                  # 20% flat
-    LTCG_RATE = Decimal("0.125")                 # 12.5%
-    LTCG_EXEMPTION = Decimal("125000")           # ₹1,25,000 per individual per FY
+    """Indian tax rates and thresholds — FY 2025-26."""
 
-    # Crypto
-    CRYPTO_RATE = Decimal("0.30")                # 30% flat
-    CRYPTO_TDS_RATE = Decimal("0.01")            # 1% TDS per transaction
+    STCG_RATE = Decimal("0.20")
+    LTCG_RATE = Decimal("0.125")
+    LTCG_EXEMPTION = Decimal("125000")
 
-    # FD
-    FD_TDS_THRESHOLD = Decimal("40000")          # TDS triggered above ₹40,000 interest
-    FD_TDS_RATE = Decimal("0.10")                # 10% TDS
+    CRYPTO_RATE = Decimal("0.30")
+    CRYPTO_TDS_RATE = Decimal("0.01")
 
-    # US Equity (DTAA)
+    FD_TDS_THRESHOLD = Decimal("40000")
+    FD_TDS_RATE = Decimal("0.10")
+
     US_EQUITY_RATE = Decimal("0.25")
 
-    # Gold (physical)
-    GOLD_LTCG_RATE = Decimal("0.125")            # 12.5% with indexation (post Budget 2024)
-    GOLD_LONG_TERM_DAYS = 730                    # 2 years for gold
+    GOLD_LTCG_RATE = Decimal("0.125")
+    GOLD_LONG_TERM_DAYS = 730
 
-    # General
-    EQUITY_LONG_TERM_DAYS = 365                  # 12 months for equity
+    EQUITY_LONG_TERM_DAYS = 365
     MF_EQUITY_LONG_TERM_DAYS = 365
-    MF_DEBT_LONG_TERM_DAYS = 1095               # 3 years for debt MF (pre-Apr 2023 purchases)
+    MF_DEBT_LONG_TERM_DAYS = 1095
 
-    # Grandfathering
     GRANDFATHERING_CUTOFF = date(2018, 1, 31)
 
-    # FY
-    FY_START_MONTH = 4   # April
+    FY_START_MONTH = 4
     FY_START_DAY = 1
 
-    # Cess
-    HEALTH_EDUCATION_CESS = Decimal("0.04")     # 4% cess on tax
+    HEALTH_EDUCATION_CESS = Decimal("0.04")
 
 
 def current_fy_start() -> date:
@@ -94,10 +79,6 @@ def current_fy_end() -> date:
     fy_start = current_fy_start()
     return date(fy_start.year + 1, 3, 31)
 
-
-# ─────────────────────────────────────────────
-# Tax Breakdown
-# ─────────────────────────────────────────────
 
 @dataclass
 class TaxBreakdown:
@@ -123,10 +104,6 @@ class TaxBreakdown:
         }
 
 
-# ─────────────────────────────────────────────
-# Asset Lot — the atomic unit of WealthMap
-# ─────────────────────────────────────────────
-
 @dataclass
 class AssetLot:
     lot_id: str = ""
@@ -138,9 +115,8 @@ class AssetLot:
     acquisition_date: date = field(default_factory=date.today)
     cost_basis_per_unit: Decimal = Decimal("0")
     current_price: Decimal = Decimal("0")
-    grandfathered_cost: Optional[Decimal] = None  # For pre-2018 equity
+    grandfathered_cost: Optional[Decimal] = None
 
-    # Optional metadata
     isin: Optional[str] = None
     name: Optional[str] = None
     exchange: Optional[str] = None
@@ -152,8 +128,6 @@ class AssetLot:
             self.lot_id = self.asset_id
         elif self.lot_id and not self.asset_id:
             self.asset_id = self.lot_id
-
-    # ── Computed Properties ──────────────────
 
     @property
     def holding_days(self) -> int:
@@ -234,10 +208,6 @@ class AssetLot:
         }
 
 
-# ─────────────────────────────────────────────
-# Realized Transaction
-# ─────────────────────────────────────────────
-
 @dataclass
 class RealizedTransaction:
     transaction_id: str
@@ -259,10 +229,6 @@ class RealizedTransaction:
         )
 
 
-# ─────────────────────────────────────────────
-# LTCG Unlock Event
-# ─────────────────────────────────────────────
-
 @dataclass
 class UnlockEvent:
     lot_id: str
@@ -271,7 +237,7 @@ class UnlockEvent:
     unlock_date: date
     quantity: Decimal
     current_gain_inr: Decimal
-    tax_saving_inr: Decimal    # STCG tax - LTCG tax on this lot
+    tax_saving_inr: Decimal
 
     @property
     def days_remaining(self) -> int:
@@ -289,10 +255,6 @@ class UnlockEvent:
             "tax_saving_inr": float(self.tax_saving_inr),
         }
 
-
-# ─────────────────────────────────────────────
-# TLH Opportunity
-# ─────────────────────────────────────────────
 
 @dataclass
 class TLHOpportunity:
@@ -329,10 +291,6 @@ class TLHOpportunity:
             "risk_notes": self.risk_notes,
         }
 
-
-# ─────────────────────────────────────────────
-# Portfolio Snapshot
-# ─────────────────────────────────────────────
 
 @dataclass
 class PortfolioSnapshot:

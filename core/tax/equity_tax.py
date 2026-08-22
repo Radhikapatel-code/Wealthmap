@@ -1,8 +1,6 @@
 """
 Equity Tax Engine — LTCG/STCG computation for Indian equities and equity MFs.
-FY 2025-26 rates:
-  STCG: 20% flat
-  LTCG: 12.5% above ₹1,25,000 exemption per individual per FY
+FY 2025-26: STCG 20% flat, LTCG 12.5% above ₹1,25,000 per individual per FY.
 """
 from __future__ import annotations
 from datetime import date, timedelta
@@ -23,13 +21,9 @@ class EquityTaxEngine:
         ytd_realized_ltcg: Decimal = Decimal("0"),
         ytd_realized_stcg: Decimal = Decimal("0"),
     ) -> dict:
-        """
-        Given a set of lots (all same symbol/member), compute aggregate tax
-        if all were sold at current price today.
-        """
+        """Compute aggregate tax if all lots were sold at current price today."""
         total_ltcg = Decimal("0")
         total_stcg = Decimal("0")
-        total_tax = Decimal("0")
 
         for lot in lots:
             gain = lot.unrealized_gain
@@ -40,12 +34,10 @@ class EquityTaxEngine:
             else:
                 total_stcg += gain
 
-        # Apply LTCG exemption
         remaining_exemption = max(TaxConstants.LTCG_EXEMPTION - ytd_realized_ltcg, Decimal("0"))
         taxable_ltcg = max(total_ltcg - remaining_exemption, Decimal("0"))
         ltcg_tax = (taxable_ltcg * TaxConstants.LTCG_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-        # STCG (no exemption)
         stcg_tax = (max(total_stcg, Decimal("0")) * TaxConstants.STCG_RATE).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
@@ -72,10 +64,7 @@ class EquityTaxEngine:
         look_ahead_days: int = 90,
         ytd_realized_ltcg: Decimal = Decimal("0"),
     ) -> list[UnlockEvent]:
-        """
-        Returns upcoming LTCG unlock events within look_ahead_days.
-        Only includes STCG lots with positive unrealized gain.
-        """
+        """Returns upcoming LTCG unlock events within the look-ahead window."""
         today = date.today()
         cutoff = today + timedelta(days=look_ahead_days)
         events: list[UnlockEvent] = []
@@ -84,10 +73,8 @@ class EquityTaxEngine:
         for lot in lots:
             if lot.asset_class not in (AssetClass.EQUITY, AssetClass.MUTUAL_FUND):
                 continue
-            if lot.is_long_term:
-                continue  # Already long-term
-            if lot.unrealized_gain <= 0:
-                continue  # Loss lot — no tax urgency
+            if lot.is_long_term or lot.unrealized_gain <= 0:
+                continue
 
             unlock_date = lot.acquisition_date + timedelta(days=TaxConstants.EQUITY_LONG_TERM_DAYS)
             if today <= unlock_date <= cutoff:
@@ -153,10 +140,7 @@ class EquityTaxEngine:
         lot: AssetLot,
         ytd_realized_ltcg: Decimal = Decimal("0"),
     ) -> dict:
-        """
-        For a single STCG lot, compute the tax delta between selling today
-        vs. waiting for LTCG classification.
-        """
+        """For a single STCG lot, compute the tax delta between selling now vs. waiting for LTCG."""
         gain = lot.unrealized_gain
         if gain <= 0:
             return {

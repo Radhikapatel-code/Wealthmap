@@ -1,7 +1,4 @@
-"""
-Family member and family unit models for WealthMap.
-Wealth is tracked at the family level — each member has their own tax slate.
-"""
+"""Family member and family unit models for WealthMap."""
 from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -14,13 +11,12 @@ from core.models import AssetLot, AssetClass, TaxConstants, PortfolioSnapshot, c
 class FamilyMember:
     member_id: str
     name: str
-    relationship: str       # SELF | SPOUSE | CHILD | PARENT | HUF
+    relationship: str
     pan: Optional[str] = None
-    tax_slab_rate: Decimal = Decimal("0.30")    # 30% for HNI
+    tax_slab_rate: Decimal = Decimal("0.30")
     is_huf: bool = False
     portfolio: Optional[PortfolioSnapshot] = None
 
-    # YTD realized gains (loaded from DB / history)
     ytd_realized_ltcg: Decimal = Decimal("0")
     ytd_realized_stcg: Decimal = Decimal("0")
     ytd_realized_crypto: Decimal = Decimal("0")
@@ -63,7 +59,7 @@ class GiftTransaction:
     tax_applicable: bool = False
     notes: str = ""
 
-    GIFT_EXEMPTION = Decimal("50000")  # Per FY per donor
+    GIFT_EXEMPTION = Decimal("50000")
 
     def __post_init__(self):
         self.tax_applicable = self.amount_inr > self.GIFT_EXEMPTION
@@ -116,7 +112,7 @@ class FamilyUnit:
         return result
 
     def concentration_risks(self, threshold_pct: float = 15.0) -> list[dict]:
-        """Flag any single stock/asset > threshold_pct of total portfolio."""
+        """Flag any single stock/asset exceeding threshold_pct of total portfolio."""
         symbol_values: dict[str, Decimal] = {}
         total = self.total_net_worth
 

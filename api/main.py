@@ -1,5 +1,5 @@
 """
-WealthMap FastAPI Application — main entry point.
+WealthMap FastAPI Application.
 Run: uvicorn api.main:app --reload --port 8000
 """
 from __future__ import annotations
@@ -13,7 +13,6 @@ from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-# Bootstrap path
 sys.path.insert(0, ".")
 
 from config.settings import get_settings, Settings
@@ -34,14 +33,6 @@ from api.schemas.asset import (
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-# ─────────────────────────────────────────────
-# App State (in-memory for demo; swap for DB in prod)
-# TODO: These module-level singletons are shared across all requests with no
-#       per-session or per-user isolation, and are not thread-safe under
-#       concurrent async requests. Replace with a proper DB/session layer
-#       before multi-user deployment.
-# ─────────────────────────────────────────────
 
 _family: Optional[FamilyUnit] = None
 _normalizer: Optional[PortfolioNormalizer] = None
@@ -66,10 +57,6 @@ def _get_cfo() -> CFOEngine:
         raise HTTPException(status_code=503, detail="AI engine not initialized.")
     return _cfo_engine
 
-
-# ─────────────────────────────────────────────
-# Startup
-# ─────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -107,16 +94,11 @@ def _init_demo_family(settings: Settings) -> FamilyUnit:
             ytd_tax_paid=Decimal("52000") if mid == "father" else Decimal("6000"),
         )
         family.add_member(member)
-        # Load lots into tracker
         for lot in snapshot.lots:
             _lot_tracker.add_lot(lot)
 
     return family
 
-
-# ─────────────────────────────────────────────
-# App
-# ─────────────────────────────────────────────
 
 app = FastAPI(
     title="WealthMap API",
@@ -125,11 +107,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# TODO: SECURITY — No authentication on any route. This app holds brokerage/exchange
-#       API credentials and portfolio data. Add auth (e.g. OAuth2, API keys) before
-#       exposing beyond localhost.
-# TODO: CORS is fully open (allow_origins=["*"]). Restrict to known frontend origins
-#       in any non-demo deployment.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -137,10 +114,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# ─────────────────────────────────────────────
-# Portfolio Routes
-# ─────────────────────────────────────────────
 
 @app.get("/portfolio/family", tags=["Portfolio"])
 def get_family_portfolio():
@@ -212,13 +185,9 @@ def add_manual_asset(request: ManualAssetRequest):
     return {"added": [lot.to_dict() for lot in lots]}
 
 
-# ─────────────────────────────────────────────
-# Tax Routes
-# ─────────────────────────────────────────────
-
 @app.get("/tax/liability", tags=["Tax"])
 def get_tax_liability(member_id: Optional[str] = None):
-    """Current FY tax liability — all members or specific member."""
+    """Current FY tax liability."""
     family = _get_family()
     return family.ytd_tax_summary()
 
@@ -242,16 +211,14 @@ def simulate_sale(
     request: SimulateSaleRequest,
     use_rust: bool = Query(default=False, description="Execute simulation using high-performance Rust engine"),
 ):
-    """Simulate selling shares — detailed lot-by-lot tax breakdown."""
+    """Simulate selling shares with detailed lot-by-lot tax breakdown."""
     family = _get_family()
     member = family.get_member(request.member_id)
     if not member:
         raise HTTPException(status_code=404, detail=f"Member '{request.member_id}' not found.")
 
-    # Get current price for this symbol
     all_lots = _lot_tracker.get_lots(request.member_id, request.symbol)
     if not all_lots:
-        # Try with .NS suffix
         all_lots = _lot_tracker.get_lots(request.member_id, request.symbol + ".NS")
     if not all_lots:
         raise HTTPException(status_code=404, detail=f"No lots found for {request.symbol} ({request.member_id})")
@@ -338,10 +305,6 @@ def get_key_dates():
     return _tax_calendar.key_dates_this_fy()
 
 
-# ─────────────────────────────────────────────
-# Family Routes
-# ─────────────────────────────────────────────
-
 @app.get("/family/members", tags=["Family"])
 def get_family_members():
     """List all family members."""
@@ -355,10 +318,6 @@ def get_gift_alerts():
     family = _get_family()
     return {"alerts": family.gift_tax_alerts()}
 
-
-# ─────────────────────────────────────────────
-# AI Routes
-# ─────────────────────────────────────────────
 
 @app.post("/ai/portfolio-health", response_model=AIResponse, tags=["AI"])
 def ai_portfolio_health():
@@ -383,7 +342,7 @@ def ai_tax_advice(request: Optional[ScenarioRequest] = None):
 
 @app.post("/ai/scenario", response_model=AIResponse, tags=["AI"])
 def ai_scenario(request: ScenarioRequest):
-    """Gemini scenario analysis — free-form query."""
+    """Gemini scenario analysis."""
     family = _get_family()
     cfo = _get_cfo()
     context = _context_builder.build_scenario_context(
@@ -413,13 +372,9 @@ def ai_daily_digest():
     return AIResponse(response=response)
 
 
-# ─────────────────────────────────────────────
-# Alerts
-# ─────────────────────────────────────────────
-
 @app.get("/alerts", tags=["Alerts"])
 def get_all_alerts():
-    """All active alerts — LTCG unlocks, advance tax, TDS."""
+    """All active alerts: LTCG unlocks, advance tax, TDS."""
     family = _get_family()
     all_lots = family.all_lots
 
@@ -442,10 +397,6 @@ def get_all_alerts():
         "alerts": alerts,
     }
 
-
-# ─────────────────────────────────────────────
-# Health
-# ─────────────────────────────────────────────
 
 @app.get("/health", tags=["System"])
 def health():

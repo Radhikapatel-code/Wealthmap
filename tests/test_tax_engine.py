@@ -1,7 +1,4 @@
-"""
-Tax engine tests — deterministic unit tests for all tax computation paths.
-Run: pytest tests/test_tax_engine.py -v
-"""
+"""Tax engine tests — deterministic unit tests for all tax computation paths."""
 import sys
 sys.path.insert(0, ".")
 
@@ -16,8 +13,6 @@ from core.tax.fd_tax import FDTaxEngine
 from core.tax.tlh_scanner import TLHScanner
 from core.tax.lot_tracker import LotTracker
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def make_equity_lot(
     symbol="RELIANCE.NS",
@@ -54,8 +49,6 @@ def make_crypto_lot(symbol="BTC", qty="0.1", cost=1500000, current=2000000) -> A
     )
 
 
-# ── LTCG/STCG Classification Tests ───────────────────────────────────────────
-
 class TestHoldingPeriodClassification:
 
     def test_exactly_365_days_is_long_term(self):
@@ -83,8 +76,6 @@ class TestHoldingPeriodClassification:
         assert lot.days_to_long_term == 0
 
 
-# ── Unrealized Gain Tests ─────────────────────────────────────────────────────
-
 class TestUnrealizedGain:
 
     def test_profit_lot(self):
@@ -104,45 +95,34 @@ class TestUnrealizedGain:
         assert lot.unrealized_gain_pct == Decimal("50.00")
 
 
-# ── Equity Tax Engine Tests ───────────────────────────────────────────────────
-
 class TestEquityTaxEngine:
     engine = EquityTaxEngine()
 
     def test_stcg_tax_computation(self):
         lot = make_equity_lot(days_held=200, qty=100, cost=1000, current=1500)
         result = self.engine.compute_tax_if_sold_today([lot])
-        # STCG gain = 50,000, tax = 50,000 * 20% = 10,000 + 4% cess = 10,400
         assert result["total_stcg_inr"] == 50000.0
         assert result["stcg_tax_inr"] == 10000.0
         assert result["cess_inr"] == pytest.approx(400.0, abs=1)
 
     def test_ltcg_within_exemption_no_tax(self):
-        # LTCG of 80,000 — under ₹1.25L exemption
         lot = make_equity_lot(days_held=400, qty=100, cost=1000, current=1800)
         result = self.engine.compute_tax_if_sold_today([lot], ytd_realized_ltcg=Decimal("0"))
-        # Gain = 80,000; under 1.25L exemption
         assert result["total_ltcg_inr"] == 80000.0
         assert result["taxable_ltcg_inr"] == 0.0
         assert result["ltcg_tax_inr"] == 0.0
 
     def test_ltcg_above_exemption_taxed(self):
-        # LTCG of 200,000, full exemption available
         lot = make_equity_lot(days_held=400, qty=100, cost=1000, current=3000)
         result = self.engine.compute_tax_if_sold_today([lot], ytd_realized_ltcg=Decimal("0"))
-        # Gain = 200,000; taxable = 200,000 - 125,000 = 75,000
-        # Tax = 75,000 * 12.5% = 9,375 + 4% cess = 9,750
         assert result["taxable_ltcg_inr"] == 75000.0
         assert result["ltcg_tax_inr"] == pytest.approx(9375.0, abs=1)
 
     def test_ltcg_exemption_partially_used(self):
-        # YTD LTCG already realized: ₹100,000; gain of ₹100,000
         lot = make_equity_lot(days_held=400, qty=100, cost=1000, current=2000)
         result = self.engine.compute_tax_if_sold_today(
             [lot], ytd_realized_ltcg=Decimal("100000")
         )
-        # Gain = 100,000; exemption remaining = 25,000
-        # Taxable = 100,000 - 25,000 = 75,000
         assert result["taxable_ltcg_inr"] == 75000.0
 
     def test_mixed_stcg_ltcg_lots(self):
@@ -159,8 +139,6 @@ class TestEquityTaxEngine:
         assert result["stcg_tax_inr"] == 0.0
         assert result["total_tax_inr"] == 0.0
 
-
-# ── Crypto Tax Tests ──────────────────────────────────────────────────────────
 
 class TestCryptoTaxEngine:
     engine = CryptoTaxEngine()
@@ -193,16 +171,13 @@ class TestCryptoTaxEngine:
             )
         ]
         summary = self.engine.compute_tds_summary(txns)
-        assert summary.tds_liability_inr == Decimal("2000.00")  # 1% of ₹2L
+        assert summary.tds_liability_inr == Decimal("2000.00")
         assert summary.tds_deducted_inr == Decimal("2000")
 
     def test_effective_rate_with_cess(self):
         result = self.engine.compute_tax_on_gain(Decimal("1000000"))
-        # 30% + 4% cess = 31.2% effective
         assert result["effective_rate_pct"] == pytest.approx(31.2, abs=0.1)
 
-
-# ── FD Tax Tests ──────────────────────────────────────────────────────────────
 
 class TestFDTaxEngine:
     engine = FDTaxEngine()
@@ -218,7 +193,6 @@ class TestFDTaxEngine:
         assert result["tds_at_source_inr"] == pytest.approx(5000.0, abs=1)
 
     def test_actual_tax_at_slab_rate(self):
-        # ₹1,00,000 interest at 30% slab = ₹30,000 tax + 4% cess = ₹31,200
         result = self.engine.compute_tax_and_tds(Decimal("100000"), Decimal("0.30"))
         assert result["actual_tax_liability_inr"] == pytest.approx(31200.0, abs=1)
 
@@ -226,11 +200,8 @@ class TestFDTaxEngine:
         result = self.engine.compute_tax_and_tds(
             Decimal("100000"), Decimal("0.30"), tds_already_deducted=Decimal("10000")
         )
-        # Tax = 31,200; TDS = 10,000; Balance = 21,200
         assert result["balance_tax_payable_inr"] == pytest.approx(21200.0, abs=1)
 
-
-# ── Lot Tracker FIFO Tests ────────────────────────────────────────────────────
 
 class TestLotTrackerFIFO:
 
@@ -245,7 +216,6 @@ class TestLotTrackerFIFO:
         result = tracker.simulate_sale("test", "INFY.NS", Decimal("30"), Decimal("2000"))
 
         breakdown = result["lot_breakdown"]
-        # First consumed should be OLD-LOT (FIFO)
         assert breakdown[0]["lot_id"] == "OLD-LOT"
         assert breakdown[0]["classification"] == "LTCG"
 
@@ -270,8 +240,6 @@ class TestLotTrackerFIFO:
         lot = make_equity_lot("WIPRO.NS", days_held=400, qty=100, cost=1000, current=3000)
         tracker.add_lot(lot)
 
-        # YTD LTCG already used ₹100,000; gain here = ₹200,000
-        # Remaining exemption = ₹25,000; taxable = ₹175,000
         result = tracker.simulate_sale(
             "test", "WIPRO.NS", Decimal("100"), Decimal("3000"),
             ytd_realized_ltcg=Decimal("100000")
@@ -290,7 +258,6 @@ class TestLotTrackerFIFO:
         assert remaining_qty == Decimal("60")
 
     def test_execute_sale_ltcg_exemption_applied(self):
-        """₹35,000 LTCG gain with zero YTD LTCG should be fully exempt (₹0 tax)."""
         tracker = LotTracker()
         lot = make_equity_lot("RELIANCE.NS", days_held=400, qty=100, cost=1000, current=1350)
         tracker.add_lot(lot)
@@ -308,8 +275,6 @@ class TestLotTrackerFIFO:
         assert tb.total_tax == Decimal("0")
 
     def test_execute_sale_ltcg_exemption_partially_used(self):
-        """YTD LTCG ₹1,00,000 already used → ₹25,000 exemption remains.
-        Gain of ₹2,00,000 → taxable = ₹1,75,000."""
         tracker = LotTracker()
         lot = make_equity_lot("WIPRO.NS", days_held=400, qty=100, cost=1000, current=3000)
         tracker.add_lot(lot)
@@ -327,8 +292,6 @@ class TestLotTrackerFIFO:
         assert tb.tax_amount == expected_tax.quantize(Decimal("0.01"))
 
     def test_execute_sale_ltcg_exemption_exhausted(self):
-        """YTD LTCG ₹1,50,000 (above ₹1,25,000 limit) → zero exemption remains.
-        Full gain is taxable."""
         tracker = LotTracker()
         lot = make_equity_lot("INFY.NS", days_held=400, qty=100, cost=1000, current=2000)
         tracker.add_lot(lot)
@@ -344,7 +307,6 @@ class TestLotTrackerFIFO:
         assert tb.tax_amount == expected_tax.quantize(Decimal("0.01"))
 
     def test_execute_sale_stcg_unchanged(self):
-        """STCG path should be unaffected — no exemption, 20% flat."""
         tracker = LotTracker()
         lot = make_equity_lot("TCS.NS", days_held=100, qty=100, cost=1000, current=1500)
         tracker.add_lot(lot)
@@ -361,7 +323,6 @@ class TestLotTrackerFIFO:
         assert tb.tax_amount == expected_tax.quantize(Decimal("0.01"))
 
     def test_execute_sale_crypto_unchanged(self):
-        """Crypto path should be unaffected — 30% flat, no exemption."""
         tracker = LotTracker()
         lot = make_crypto_lot("BTC", qty="1", cost=2000000, current=3000000)
         tracker.add_lot(lot)
@@ -377,8 +338,6 @@ class TestLotTrackerFIFO:
         expected_tax = Decimal("1000000") * Decimal("0.30")
         assert tb.tax_amount == expected_tax.quantize(Decimal("0.01"))
 
-
-# ── TLH Scanner Tests ─────────────────────────────────────────────────────────
 
 class TestTLHScanner:
     scanner = TLHScanner()
@@ -410,12 +369,9 @@ class TestTLHScanner:
         opps = self.scanner.scan([lt_loss, st_gain, lt_gain])
         lt_opp = next((o for o in opps if o.loss_lot.symbol == "LTLOSS.NS"), None)
         if lt_opp:
-            # LTCG loss should only show LTCG gain lots
             for gain_lot in lt_opp.offsettable_gain_lots:
                 assert gain_lot.is_long_term, "LTCG loss should only offset LTCG gains"
 
-
-# ── FY Boundary Tests ─────────────────────────────────────────────────────────
 
 class TestFYBoundary:
 
@@ -432,28 +388,20 @@ class TestFYBoundary:
         assert fy_end.day == 31
 
 
-# ── Bug Fix & Edge Case Tests ──────────────────────────────────────────────────
-
 class TestOptimalSellAndCalendarFixes:
 
     def test_optimal_sell_recommendation_respects_ytd_realized_ltcg(self):
         engine = EquityTaxEngine()
-        lot = make_equity_lot(days_held=200, qty=100, cost=1000, current=2000)  # gain = 100,000
+        lot = make_equity_lot(days_held=200, qty=100, cost=1000, current=2000)
 
-        # Case 1: 0 YTD realized LTCG -> remaining exemption = 125,000.
-        # If waited for LTCG, taxable LTCG = max(100k - 125k, 0) = 0. LTCG tax = 0.
         rec_fresh = engine.optimal_sell_recommendation(lot, ytd_realized_ltcg=Decimal("0"))
         assert rec_fresh["remaining_exemption_inr"] == 125000.0
         assert rec_fresh["ltcg_tax_if_waited_inr"] == 0.0
 
-        # Case 2: YTD realized LTCG = 100,000 -> remaining exemption = 25,000.
-        # If waited for LTCG, taxable LTCG = 100k - 25k = 75,000. LTCG tax = 75k * 12.5% = 9,375.
         rec_part = engine.optimal_sell_recommendation(lot, ytd_realized_ltcg=Decimal("100000"))
         assert rec_part["remaining_exemption_inr"] == 25000.0
         assert rec_part["ltcg_tax_if_waited_inr"] == 9375.0
 
-        # Case 3: YTD realized LTCG = 150,000 -> remaining exemption = 0.
-        # If waited for LTCG, taxable LTCG = 100k. LTCG tax = 100k * 12.5% = 12,500.
         rec_used = engine.optimal_sell_recommendation(lot, ytd_realized_ltcg=Decimal("150000"))
         assert rec_used["remaining_exemption_inr"] == 0.0
         assert rec_used["ltcg_tax_if_waited_inr"] == 12500.0
@@ -461,7 +409,7 @@ class TestOptimalSellAndCalendarFixes:
     def test_tax_calendar_ltcg_unlock_events_uses_equity_engine_and_ytd_ltcg(self):
         from core.tax.tax_calendar import TaxCalendar
         calendar = TaxCalendar()
-        lot = make_equity_lot(days_held=300, qty=100, cost=1000, current=2000)  # unlocks in 65 days
+        lot = make_equity_lot(days_held=300, qty=100, cost=1000, current=2000)
 
         events_fresh = calendar.ltcg_unlock_events([lot], look_ahead_days=90, ytd_realized_ltcg=Decimal("0"))
         assert len(events_fresh) == 1
@@ -477,7 +425,6 @@ class TestDebtMFTaxCutoffDate:
     def test_post_april_2023_debt_mf_always_slab_rate(self):
         from core.tax.mf_tax import MFTaxEngine
         engine = MFTaxEngine()
-        # Purchased post April 1, 2023 (e.g., 2023-05-01)
         lot = AssetLot(
             lot_id="DEBT-POST-2023",
             symbol="HDFC_DEBT",
@@ -497,7 +444,6 @@ class TestDebtMFTaxCutoffDate:
     def test_pre_april_2023_debt_mf_qualifies_for_ltcg_if_held_3_years(self):
         from core.tax.mf_tax import MFTaxEngine
         engine = MFTaxEngine()
-        # Purchased pre April 1, 2023 (e.g., 2020-01-01)
         lot = AssetLot(
             lot_id="DEBT-PRE-2023-LT",
             symbol="ICICI_DEBT",
@@ -516,4 +462,3 @@ class TestDebtMFTaxCutoffDate:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
-

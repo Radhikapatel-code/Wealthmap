@@ -1,7 +1,4 @@
-"""
-Gemini CFO Engine — manages Google Gemini API calls with structured context.
-Gemini reasons over pre-computed structured data, never raw numbers.
-"""
+"""Gemini CFO Engine — AI-powered portfolio intelligence via Google Gemini API."""
 from __future__ import annotations
 import json
 import logging
@@ -37,8 +34,6 @@ class CFOEngine:
             logger.warning("No Gemini API key provided. AI features will be unavailable.")
         genai.configure(api_key=key)
         self.model = genai.GenerativeModel(MODEL)
-
-    # ── Synchronous Calls ────────────────────────────────────────────────────
 
     def portfolio_health(self, context: dict) -> str:
         """Full portfolio health assessment."""
@@ -97,11 +92,8 @@ class CFOEngine:
             "\n\nCurrent portfolio context:\n"
             f"```json\n{json.dumps(context, indent=2)}\n```"
         )
-
         messages = conversation_history + [{"role": "user", "content": user_message}]
         return self._call(system, messages=messages)
-
-    # ── Streaming ────────────────────────────────────────────────────────────
 
     def stream_response(self, system: str, user_msg: str):
         """Yield text chunks from streaming API call."""
@@ -110,8 +102,6 @@ class CFOEngine:
         for chunk in response:
             if chunk.text:
                 yield chunk.text
-
-    # ── Internal ─────────────────────────────────────────────────────────────
 
     def _call(
         self,
@@ -123,7 +113,6 @@ class CFOEngine:
             if messages is None and user_msg:
                 full_message = f"{system}\n\nUser: {user_msg}"
             else:
-                # For multi-turn conversations, reconstruct from history
                 message_text = "\n".join(
                     [f"{msg['role'].capitalize()}: {msg['content']}" for msg in (messages or [])]
                 )
