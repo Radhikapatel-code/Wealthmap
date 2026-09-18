@@ -26,6 +26,10 @@ python-binance==1.0.19
 # Zerodha
 kiteconnect==5.0.1
 
+# Additional crypto dependencies
+# pyotp for TOTP generation (optional, for Angel One)
+# pyotp==2.9.0
+
 # HTTP
 httpx==0.27.0
 requests==2.32.3

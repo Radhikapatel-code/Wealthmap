@@ -32,6 +32,19 @@ class Settings(BaseSettings):
     coindcx_api_key: str = ""
     coindcx_api_secret: str = ""
 
+    upstox_api_key: str = ""
+    upstox_api_secret: str = ""
+    upstox_redirect_uri: str = ""
+    upstox_access_token: str = ""
+
+    angel_one_api_key: str = ""
+    angel_one_client_code: str = ""
+    angel_one_password: str = ""
+    angel_one_totp_secret: str = ""
+
+    wazirx_api_key: str = ""
+    wazirx_api_secret: str = ""
+
     fy_start_month: int = 4
     default_member_id: str = "primary"
     usd_inr_rate: float = 83.5

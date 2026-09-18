@@ -56,6 +56,9 @@ Copy `config/.env.example` to `.env` and fill in:
 | `KITE_API_KEY` + `KITE_ACCESS_TOKEN` | Optional | Zerodha equity data |
 | `BINANCE_API_KEY` + `BINANCE_API_SECRET` | Optional | Binance crypto data |
 | `COINDCX_API_KEY` | Optional | CoinDCX crypto data |
+| `UPSTOX_API_KEY` + `UPSTOX_API_SECRET` + `UPSTOX_REDIRECT_URI` | Optional | Upstox equity data (OAuth 2.0) |
+| `ANGEL_ONE_API_KEY` + `ANGEL_ONE_CLIENT_CODE` + `ANGEL_ONE_PASSWORD` | Optional | Angel One equity data (TOTP) |
+| `WAZIRX_API_KEY` + `WAZIRX_API_SECRET` | Optional | WazirX crypto data (INR pairs) |
 | `TELEGRAM_BOT_TOKEN` | Optional | Daily digest alerts |
 
 Without exchange API keys, WealthMap runs with realistic mock/demo data.
@@ -74,9 +77,12 @@ Without exchange API keys, WealthMap runs with realistic mock/demo data.
 │  │ Zerodha API  │───▶│ Portfolio    │───▶│ Gemini       │  │
 │  │ Binance API  │    │ Normalizer   │    │ CFO Engine   │  │
 │  │ CoinDCX API  │    │              │    │              │  │
-│  │ Yahoo Finance│    │ Tax Engine   │    │ Structured   │  │
-│  │ Live FX Feed │    │ (FIFO lots)  │    │ Context      │  │
-│  │ Manual Input │    │ TLH Scanner  │    │ Builder      │  │
+│  │ Upstox API   │    │ Tax Engine   │    │ Structured   │  │
+│  │ Angel One API│    │ (FIFO lots)  │    │ Context      │  │
+│  │ WazirX API   │    │ TLH Scanner  │    │ Builder      │  │
+│  │ Yahoo Finance│    │              │    │              │  │
+│  │ Live FX Feed │    │              │    │              │  │
+│  │ Manual Input │    │              │    │              │  │
 │  └──────────────┘    │ Tax Calendar │    └──────────────┘  │
 │                      │ State Manager│            │          │
 │                      └──────────────┘            ▼          │
@@ -113,12 +119,12 @@ WealthMap includes a native Rust engine [`wealthmap-engine`](./wealthmap-engine/
 ### 1. Multi-Asset Aggregation
 | Asset | Source | Status |
 |---|---|---|
-| Indian Equity | Zerodha Kite API | ✅ |
-| Crypto | Binance + CoinDCX | ✅ |
-| Mutual Funds | CSV import / manual | ✅ |
+| Indian Equity | Zerodha, Upstox, Angel One | ✅ |
+| Crypto | Binance, CoinDCX, WazirX | ✅ |
+| Mutual Funds | AMFI NAV feed, CSV import | ✅ |
+| US Equity | Alpaca, CSV import | ✅ |
 | Fixed Deposits | Manual JSON | ✅ |
 | Physical Gold | Manual JSON | ✅ |
-| US Equity | Manual JSON (with live FX conversion) | ✅ |
 
 ### 2. Indian Tax Engine (FY 2025-26)
 - **FIFO lot tracking** — every purchase is a separate lot with its own acquisition date and cost basis
@@ -193,6 +199,42 @@ POST /ai/scenario                   Free-form scenario analysis
 POST /ai/chat                       Multi-turn CFO chat
 GET  /ai/daily-digest               Daily digest
 ```
+
+---
+
+## 🔌 Integrations
+
+WealthMap supports a growing list of financial platform integrations for automated portfolio aggregation:
+
+### Supported Connectors
+
+| Provider | Asset Type | Status | Authentication |
+|----------|------------|--------|----------------|
+| **Zerodha** | Indian Equity & F&O | ✅ Production | API Key + Daily TOTP Token |
+| **Upstox** | Indian Equity & F&O | ✅ Production | OAuth 2.0 |
+| **Angel One** | Indian Equity & F&O | ✅ Production | API Key + TOTP |
+| **Binance** | Crypto (Global) | ✅ Production | HMAC-SHA256 API Key |
+| **CoinDCX** | Crypto (INR) | ✅ Production | HMAC-SHA256 API Key |
+| **WazirX** | Crypto (INR) | ✅ Production | HMAC-SHA256 API Key |
+| **Alpaca** | US Equity | ✅ Production | API Key ID + Secret |
+| **AMFI** | Mutual Fund NAV | ✅ Production | Public (No Auth) |
+| **CSV Statement** | All Asset Types | ✅ Production | CSV Upload |
+
+### Documentation
+
+For detailed integration setup, authentication guides, and feasibility assessments, see:
+
+- **[Integration Guide](docs/integrations.md)** - Complete setup instructions for all supported connectors
+- **[Integration Architecture](docs/integration-architecture.md)** - Technical architecture documentation
+- **[Integration Feasibility Matrix](docs/integration-feasibility-matrix.md)** - Assessment of 25+ potential integrations
+- **[Integration Audit Report](docs/integration-audit-report.md)** - Comprehensive audit findings and recommendations
+
+### Security
+
+- Credentials stored in environment variables only
+- Never sent to AI layer (Gemini receives only structured portfolio data)
+- Read-only API keys preferred where available
+- Masked identifiers displayed in UI
 
 ---
 

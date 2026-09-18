@@ -362,3 +362,207 @@ def get_all_alerts(session_id: str = Depends(get_session_id)):
         "total_alerts": len(alerts),
         "alerts": alerts,
     }
+
+
+# ── Integrations & External Connectors ─────────────────────────────────────────
+
+@app.get("/integrations/accounts", tags=["Integrations"], dependencies=[Depends(verify_api_key)])
+def list_connected_accounts(session_id: str = Depends(get_session_id)):
+    """List all connected accounts across providers and family members."""
+    sync_engine = _state_manager.get_sync_engine(session_id)
+    accounts = sync_engine.list_accounts()
+    return {
+        "total_accounts": len(accounts),
+        "accounts": [
+            {
+                "account_id": a.account_id,
+                "provider": a.provider,
+                "family_member_id": a.family_member_id,
+                "account_type": a.account_type,
+                "currency": a.currency,
+                "masked_identifier": a.masked_identifier,
+                "status": a.status.value,
+                "last_synced_at": a.last_synced_at.isoformat() if a.last_synced_at else None,
+                "error_message": a.error_message,
+            }
+            for a in accounts
+        ],
+    }
+
+
+@app.post("/integrations/sync", tags=["Integrations"], dependencies=[Depends(verify_api_key)])
+def sync_accounts(
+    connector_id: Optional[str] = Query(None, description="Specific connector ID, or omit to sync all"),
+    session_id: str = Depends(get_session_id),
+):
+    """Trigger incremental sync on connected provider accounts."""
+    sync_engine = _state_manager.get_sync_engine(session_id)
+    family = _state_manager.get_family(session_id)
+    tracker = _state_manager.get_lot_tracker(session_id)
+
+    if connector_id:
+        result = sync_engine.sync_connector(connector_id)
+        results = [result]
+    else:
+        results = sync_engine.sync_all()
+
+    # Refresh family snapshot and lot tracker
+    for member in family.members:
+        fresh_snapshot = sync_engine.build_member_snapshot(member.member_id, existing_snapshot=member.portfolio)
+        member.portfolio = fresh_snapshot
+        for lot in fresh_snapshot.lots:
+            tracker.add_lot(lot)
+
+    return {
+        "sync_results": [
+            {
+                "account_id": r.account_id,
+                "provider": r.provider,
+                "status": r.status.value,
+                "holdings_count": r.holdings_count,
+                "transactions_count": r.transactions_count,
+                "synced_at": r.synced_at.isoformat(),
+                "error_message": r.error_message,
+            }
+            for r in results
+        ]
+    }
+
+
+@app.post("/integrations/connect", tags=["Integrations"], dependencies=[Depends(verify_api_key)])
+def connect_provider(
+    payload: dict,
+    session_id: str = Depends(get_session_id),
+):
+    """Register and authenticate a new provider connection."""
+    from core.connectors.providers.zerodha import ZerodhaConnector
+    from core.connectors.providers.binance import BinanceConnector
+    from core.connectors.providers.coindcx import CoinDCXConnector
+    from core.connectors.providers.alpaca import AlpacaConnector
+    from core.connectors.providers.upstox import UpstoxConnector
+    from core.connectors.providers.angel_one import AngelOneConnector
+    from core.connectors.providers.wazirx import WazirXConnector
+
+    sync_engine = _state_manager.get_sync_engine(session_id)
+    provider = payload.get("provider", "").lower()
+    member_id = payload.get("member_id", "father")
+    cid = f"{provider}_{member_id}"
+
+    if provider == "zerodha":
+        conn = ZerodhaConnector(
+            api_key=payload.get("api_key", ""),
+            access_token=payload.get("access_token", ""),
+            member_id=member_id,
+            client_id=payload.get("client_id"),
+        )
+    elif provider == "binance":
+        conn = BinanceConnector(
+            api_key=payload.get("api_key", ""),
+            api_secret=payload.get("api_secret", ""),
+            member_id=member_id,
+        )
+    elif provider == "coindcx":
+        conn = CoinDCXConnector(
+            api_key=payload.get("api_key", ""),
+            api_secret=payload.get("api_secret", ""),
+            member_id=member_id,
+        )
+    elif provider == "alpaca":
+        conn = AlpacaConnector(
+            api_key_id=payload.get("api_key", ""),
+            secret_key=payload.get("api_secret", ""),
+            member_id=member_id,
+            base_url=payload.get("base_url"),
+        )
+    elif provider == "upstox":
+        conn = UpstoxConnector(
+            api_key=payload.get("api_key", ""),
+            api_secret=payload.get("api_secret", ""),
+            redirect_uri=payload.get("redirect_uri", ""),
+            member_id=member_id,
+            access_token=payload.get("access_token"),
+        )
+    elif provider == "angel_one":
+        conn = AngelOneConnector(
+            api_key=payload.get("api_key", ""),
+            client_code=payload.get("client_code", ""),
+            password=payload.get("password", ""),
+            totp_secret=payload.get("totp_secret"),
+            member_id=member_id,
+            jwt_token=payload.get("jwt_token"),
+        )
+    elif provider == "wazirx":
+        conn = WazirXConnector(
+            api_key=payload.get("api_key", ""),
+            api_secret=payload.get("api_secret", ""),
+            member_id=member_id,
+        )
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported provider: {provider}")
+
+    auth_success = conn.authenticate()
+    sync_engine.register_connector(cid, conn)
+
+    accounts = conn.get_accounts()
+    acc = accounts[0] if accounts else None
+
+    return {
+        "connector_id": cid,
+        "provider": provider,
+        "authenticated": auth_success,
+        "status": conn.status.value,
+        "masked_identifier": acc.masked_identifier if acc else "",
+        "error_message": conn.last_error,
+    }
+
+
+@app.delete("/integrations/disconnect/{connector_id}", tags=["Integrations"], dependencies=[Depends(verify_api_key)])
+def disconnect_provider(connector_id: str, session_id: str = Depends(get_session_id)):
+    sync_engine = _state_manager.get_sync_engine(session_id)
+    success = sync_engine.unregister_connector(connector_id)
+    if not success:
+        raise HTTPException(status_code=404, detail=f"Connector '{connector_id}' not found.")
+    return {"status": "disconnected", "connector_id": connector_id}
+
+
+@app.post("/integrations/upload-statement", tags=["Integrations"], dependencies=[Depends(verify_api_key)])
+def upload_statement(
+    provider: str = Query("groww", description="groww | cams | generic"),
+    member_id: str = Query("mother", description="father | mother | son | child"),
+    payload: dict = None,
+    session_id: str = Depends(get_session_id),
+):
+    """Ingest CSV statement and normalize into member portfolio."""
+    from core.connectors.providers.csv_statement import CSVStatementConnector
+
+    csv_text = payload.get("csv_content", "") if payload else ""
+    if not csv_text:
+        raise HTTPException(status_code=400, detail="Missing csv_content in payload.")
+
+    sync_engine = _state_manager.get_sync_engine(session_id)
+    family = _state_manager.get_family(session_id)
+    tracker = _state_manager.get_lot_tracker(session_id)
+
+    member = family.get_member(member_id)
+    if not member:
+        raise HTTPException(status_code=404, detail=f"Member '{member_id}' not found.")
+
+    cid = f"{provider}_{member_id}_upload"
+    conn = CSVStatementConnector(provider_name=provider, member_id=member_id)
+    holdings = conn.parse_holdings_csv(csv_text)
+    sync_engine.register_connector(cid, conn)
+
+    # Convert to AssetLots and add to member portfolio
+    for h in holdings:
+        lot = sync_engine.canonical_to_asset_lot(h, member_id)
+        if member.portfolio:
+            member.portfolio.lots.append(lot)
+        tracker.add_lot(lot)
+
+    return {
+        "status": "imported",
+        "provider": provider,
+        "member_id": member_id,
+        "holdings_imported": len(holdings),
+    }
+
